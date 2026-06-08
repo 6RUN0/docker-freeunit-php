@@ -1,0 +1,22 @@
+# Self-contained hardened deployment: examples/Dockerfile bakes the app and its
+# Unit config onto the published freeunit-php base, so nothing is bind-mounted.
+# Build and run with:
+#
+#   docker compose up --build
+#
+# then open http://localhost:8080/.
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    cap_drop:
+      - ALL
+    cap_add:
+      # The Unit master starts as root and drops each worker to the app
+      # user/group named in config.json; SETUID/SETGID are all it needs to do so.
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

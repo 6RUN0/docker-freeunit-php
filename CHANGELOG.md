@@ -26,6 +26,15 @@ release records the FreeUnit and PHP versions it ships.
   Actions.
 - CI lint job gained workflow and markdown gates: actionlint, zizmor (workflow
   security audit), and rumdl.
+- The CI trivy scan now emits SARIF and uploads it to GitHub code scanning, so
+  CVEs surface in the Security tab and are tracked over time.
+- `.github/workflows/security-scan.yml`: a weekly (and manually dispatchable)
+  trivy re-scan of the *published* GHCR images per PHP line, so CVEs disclosed
+  after a release surface without a new push.
+- `examples/`: a self-contained, security-hardened deployment — a small
+  `Dockerfile` bakes the app and its Unit config onto the published base image
+  (config copied into `/docker-entrypoint.d`, no bind mounts), run with cap-drop
+  and `no-new-privileges` hardening, with a worker that drops to the `unit` user.
 
 ### Changed
 

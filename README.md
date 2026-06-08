@@ -91,6 +91,10 @@ daemon against the control socket, applies everything in `/docker-entrypoint.d/`
 then restarts the daemon in the foreground. If that initial configuration fails,
 the state directory is wiped so the next start retries cleanly.
 
+A self-contained, security-hardened example (a small `Dockerfile` that bakes an
+app and its config onto the image) is in [`examples/`](examples/) —
+`cd examples && docker compose up --build`.
+
 ### `/docker-entrypoint.d/` conventions
 
 Files are applied in lexical order, by extension:
