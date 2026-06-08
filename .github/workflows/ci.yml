@@ -51,10 +51,13 @@ jobs:
       - name: rumdl (markdown)
         run: |
           pipx install rumdl==0.2.9
-          rumdl check ./*.md
+          rumdl check ./*.md ./examples/*.md
 
   build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      security-events: write # upload the trivy SARIF to code scanning
     strategy:
       fail-fast: false
       matrix:
@@ -83,9 +86,11 @@ jobs:
 
       # Report-only CVE scan, reusing the image just built on the 8.4 leg (the
       # base layers are shared, so one representative variant suffices) instead
-      # of a separate job that rebuilds from scratch. Base-image / sury CVEs are
-      # outside this repo's control, so a finding informs rather than blocks;
-      # tighten to exit-code 1 if desired.
+      # of a separate job that rebuilds from scratch. Emit SARIF and upload it to
+      # code scanning so findings land in the Security tab and are tracked over
+      # time, instead of scrolling past in the build log. Base-image / sury CVEs
+      # are outside this repo's control, so a finding informs (exit-code 0)
+      # rather than blocks; tighten to exit-code 1 if desired.
       - name: trivy image scan
         if: matrix.php == '8.4'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -93,4 +98,12 @@ jobs:
           image-ref: freeunit-php:trixie-php8.4
           severity: HIGH,CRITICAL
           exit-code: "0"
-          format: table
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: upload trivy SARIF
+        if: matrix.php == '8.4'
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image

@@ -1,0 +1,60 @@
+name: security-scan
+
+# Weekly CVE re-scan of the *published* images. ci.yml only scans on push/PR, so
+# a vulnerability disclosed in the Debian base or the sury PHP packages after a
+# release would go unnoticed until the next build. This re-scans what is actually
+# in GHCR and uploads the results to code scanning, so they surface in the
+# Security tab. Report-only: base/sury CVEs are outside this repo's control.
+on:
+  schedule:
+    - cron: "41 6 * * 2" # Tuesdays 06:41 UTC (offset from check-upstream's Monday)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan
+  cancel-in-progress: false
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # pull the image to scan (works for a private GHCR package too)
+      security-events: write # upload the SARIF to code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.3", "8.4", "8.5"]
+    env:
+      PHP: ${{ matrix.php }}
+    steps:
+      # Single-source the registry path from the repo owner (lowercased, as GHCR
+      # requires); scan the floating per-PHP tag, i.e. the newest published image.
+      - name: derive image ref
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          echo "IMAGE_REF=ghcr.io/${owner}/freeunit-php:trixie-php${PHP}" >> "$GITHUB_ENV"
+
+      - name: log in to GHCR
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: trivy scan published image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_REF }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: upload trivy SARIF
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-published-php${{ matrix.php }}
