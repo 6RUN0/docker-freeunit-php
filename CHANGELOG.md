@@ -10,6 +10,26 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-06-08
+
+### Added
+
+- `test/smoke.sh` gained a `--build` flag (with `--php X.Y`) so a single
+  invocation covers the whole build -> run -> assert pipeline; the PHP line is
+  taken from `--php`, else parsed from the image ref's `phpX.Y` tag, else the
+  Dockerfile ARG default. Without `--build` the script still tests a prebuilt
+  image, so `make test` and the CI build+smoke step are unchanged.
+
+### Fixed
+
+- `rootfs/docker-entrypoint.sh`: stop the post-configuration daemon with an
+  explicit `if` instead of the `[ -f pid ] && kill … || true` one-liner, fixing
+  a ShellCheck SC2015 failure on the CI runner's shellcheck and stating the
+  intent more clearly.
+- `test/smoke.sh`: poll the Unit control socket when verifying the uploaded
+  certificate, fixing an intermittent CI failure where the controller had not
+  finished restarting after initial configuration before the single probe ran.
+
 ## [0.0.1] - 2026-06-08
 
 Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
@@ -58,5 +78,6 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/6RUN0/docker-freeunit-php/releases/tag/v0.0.1
