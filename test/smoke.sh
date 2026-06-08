@@ -1,32 +1,50 @@
 #!/usr/bin/env bash
 #
-# End-to-end smoke test: run the given image with a populated /docker-entrypoint.d
-# and assert the entrypoint processed every artifact type it supports:
+# End-to-end smoke test: optionally build, then run the image with a populated
+# /docker-entrypoint.d and assert the entrypoint processed every artifact type
+# it supports:
 #   *.sh    a shell script is executed (it writes a marker we read back)
 #   *.pem   a certificate bundle is uploaded to the Unit control API
 #   *.json  the app config is applied (proven by the app actually serving)
 # This also proves the FreeUnit daemon starts, the embedded PHP module loads,
 # the control socket accepts requests, and a request reaches PHP.
 #
-#   ./test/smoke.sh freeunit-php:trixie-php8.4
+#   ./test/smoke.sh freeunit-php:trixie-php8.4            # test a prebuilt image
+#   ./test/smoke.sh --build freeunit-php:trixie-php8.5    # build it first, then test
+#   ./test/smoke.sh --build --php 8.5 freeunit-php:dev    # build a chosen PHP line
 
 set -euo pipefail
 
 usage() {
     cat <<EOF
-Usage: ${0##*/} <image-ref>
+Usage: ${0##*/} [--build] [--php X.Y] <image-ref>
 
 Run <image-ref>, feed the entrypoint a *.sh / *.pem / *.json set through
 /docker-entrypoint.d, then assert each was processed and the app is served.
 
   <image-ref>   image to test, e.g. freeunit-php:trixie-php8.4
+  --build       docker build <image-ref> from the repo root before testing
+  --php X.Y     PHP line to build (--build only); default: parsed from the ref's
+                'phpX.Y' tag, else the Dockerfile ARG default
   -h, --help    show this help and exit
 EOF
 }
 
-case "${1:-}" in
-    -h | --help) usage; exit 0 ;;
-esac
+do_build=
+php_ver=
+positional=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h | --help) usage; exit 0 ;;
+        --build) do_build=1; shift ;;
+        --php) php_ver="${2:?--php requires a value}"; shift 2 ;;
+        --php=*) php_ver="${1#*=}"; shift ;;
+        --) shift; positional+=("$@"); break ;;
+        -*) echo "unknown option: $1" >&2; usage >&2; exit 1 ;;
+        *) positional+=("$1"); shift ;;
+    esac
+done
+set -- "${positional[@]}"
 if [ "$#" -lt 1 ]; then
     usage >&2
     exit 1
@@ -35,7 +53,8 @@ fi
 IMAGE_REF=$1
 MARKER='freeunit-php-smoke-ok'
 CONTAINER="freeunit-smoke-$$"
-FIXTURES="$(cd "$(dirname "$0")/fixtures" && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FIXTURES="$REPO_ROOT/test/fixtures"
 
 # Markers the assertions below look for: the *.sh script writes SCRIPT_MARKER into
 # SCRIPT_MARKER_FILE inside the container; the *.pem bundle lands under CERT_NAME.
@@ -76,6 +95,22 @@ if command -v openssl >/dev/null 2>&1; then
     cert_check=1
 else
     echo "WARNING: openssl not found; skipping the *.pem certificate-upload check" >&2
+fi
+
+# Optionally build the image under test first, so one command covers the whole
+# pipeline (build -> run -> assert). PHP_VER is the only build-arg that varies
+# here; SUITE / FREEUNIT_* fall back to their Dockerfile ARG defaults. The PHP
+# line comes from --php, else from the ref's 'phpX.Y' tag, else the ARG default.
+if [ -n "$do_build" ]; then
+    if [ -z "$php_ver" ] && [[ "$IMAGE_REF" =~ php([0-9]+\.[0-9]+) ]]; then
+        php_ver="${BASH_REMATCH[1]}"
+    fi
+    build_args=()
+    if [ -n "$php_ver" ]; then
+        build_args+=(--build-arg "PHP_VER=$php_ver")
+    fi
+    echo "==> building $IMAGE_REF${php_ver:+ (PHP $php_ver)}"
+    docker build "${build_args[@]}" -t "$IMAGE_REF" "$REPO_ROOT"
 fi
 
 echo "==> starting $CONTAINER from $IMAGE_REF"
