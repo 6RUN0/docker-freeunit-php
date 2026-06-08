@@ -34,6 +34,25 @@ jobs:
       - name: typos
         uses: crate-ci/typos@685eb3d55be2f85191e8c84acb9f44d7756f84ab # v1.29.4
 
+      - name: actionlint
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+
+      # zizmor (workflow security audit) and rumdl (markdown) both ship on PyPI;
+      # install them with pipx (preinstalled on the runner) at the same versions
+      # used locally so CI mirrors `make lint`. GH_TOKEN lets zizmor run its
+      # online audits (known-vulnerable action checks).
+      - name: zizmor (workflow security)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pipx install zizmor==1.25.2
+          zizmor .github/workflows
+
+      - name: rumdl (markdown)
+        run: |
+          pipx install rumdl==0.2.9
+          rumdl check ./*.md
+
   build-test:
     runs-on: ubuntu-latest
     strategy:
@@ -45,8 +64,21 @@ jobs:
         with:
           persist-credentials: false
 
-      # Builds php<ver> and runs the end-to-end smoke test against it.
+      - name: set up buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      # Builds php<ver> and runs the end-to-end smoke test against it. The
+      # Makefile forwards DOCKER_BUILD_EXTRA to `docker build`, so wire buildx's
+      # GitHub Actions layer cache here: --load drops the built image into the
+      # local daemon (the smoke test and trivy run `docker run`/scan against it),
+      # and a per-PHP cache scope keeps the matrix legs from clobbering each
+      # other's apt/download layers across runs.
       - name: build + smoke test
+        env:
+          DOCKER_BUILD_EXTRA: >-
+            --load
+            --cache-from type=gha,scope=php${{ matrix.php }}
+            --cache-to type=gha,mode=max,scope=php${{ matrix.php }}
         run: make test DEFAULT_PHP=${{ matrix.php }}
 
       # Report-only CVE scan, reusing the image just built on the 8.4 leg (the

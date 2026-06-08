@@ -1,0 +1,22 @@
+# Keep the pinned GitHub Actions SHAs current. Actions are pinned by full
+# commit SHA (with a human-readable version comment) across the workflows, so
+# they never drift on their own — Dependabot opens the bump PRs.
+#
+# Scope is deliberately Actions-only: the Debian base image is referenced as
+# `FROM debian:${SUITE}${IMAGE_SUFFIX}` (ARG-interpolated), which Dependabot's
+# docker manager cannot parse, and the FreeUnit .deb bump (which must also
+# recompute FREEUNIT_SHA256SUMS_SHA256) is handled by check-upstream.yml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    # One grouped PR per run instead of one per action — less review churn for
+    # routine SHA bumps that all land in the same workflow files.
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+    labels: ["dependencies", "github-actions"]

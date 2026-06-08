@@ -1,0 +1,146 @@
+name: check-upstream
+
+# Watch the FreeUnit package repo for a new release and open a bump PR.
+#
+# The FreeUnit bump is the one update Dependabot/Renovate can't do out of the
+# box: besides moving FREEUNIT_VERSION/FREEUNIT_RELEASE it must recompute
+# FREEUNIT_SHA256SUMS_SHA256 (the in-repo trust anchor for the release's
+# SHA256SUMS). This job does exactly that, then opens a PR for review — it never
+# pushes to a release branch itself.
+#
+# Note: the PR is created with the built-in GITHUB_TOKEN, and events from that
+# token do NOT trigger other workflows, so ci.yml will not run automatically on
+# the bump PR. Close/reopen the PR (or push an empty commit) to kick CI, which
+# is where the .debs are actually downloaded, checksum-verified, and built.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: 6RUN0/freeunit
+  # PHP lines the image matrix covers; the release must ship a module .deb for
+  # each (kept in sync with the build matrix in ci.yml / release.yml by hand).
+  PHP_LINES: "8.3 8.4 8.5"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the bump branch
+      pull-requests: write # open the bump PR
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: check for a newer FreeUnit release and prepare the bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Current coordinates, single-sourced from the Dockerfile ARGs.
+          suite=$(sed -n 's/^ARG SUITE=//p' Dockerfile)
+          cur_release=$(sed -n 's/^ARG FREEUNIT_RELEASE=//p' Dockerfile)
+          cur_version=$(sed -n 's/^ARG FREEUNIT_VERSION=//p' Dockerfile)
+          : "${suite:?could not read ARG SUITE}"
+          : "${cur_release:?could not read ARG FREEUNIT_RELEASE}"
+
+          # Latest non-draft, non-prerelease tag from the package repo.
+          new_release=$(gh release view --repo "$UPSTREAM_REPO" --json tagName -q .tagName)
+          : "${new_release:?could not resolve the latest upstream release}"
+          echo "current release: $cur_release"
+          echo "latest release:  $new_release"
+          if [ "$new_release" = "$cur_release" ]; then
+            echo "up to date, nothing to do"
+            exit 0
+          fi
+
+          branch="chore/freeunit-${new_release}"
+          if gh pr list --head "$branch" --state open --json number -q '.[].number' | grep -q .; then
+            echo "a bump PR for $new_release is already open ($branch), skipping"
+            exit 0
+          fi
+
+          # Pull the release's integrity manifest and derive everything from it.
+          base="https://github.com/${UPSTREAM_REPO}/releases/download/${new_release}"
+          work=$(mktemp -d)
+          curl -fsSL --retry 3 --retry-connrefused -o "$work/SHA256SUMS" "${base}/SHA256SUMS"
+
+          # New trust anchor: the digest of this release's SHA256SUMS.
+          new_digest=$(sha256sum "$work/SHA256SUMS" | cut -d' ' -f1)
+
+          # New deb version comes from the core asset name. GitHub renames the
+          # '~' to '.' in download URLs, but SHA256SUMS keeps the real '~' name:
+          #   unit_<version>~<suite>_amd64.deb
+          core=$(grep -oE "unit_[^ ]+~${suite}_amd64\.deb" "$work/SHA256SUMS" | head -n1)
+          : "${core:?no core unit_*~${suite}_amd64.deb entry in SHA256SUMS}"
+          new_version=${core#unit_}
+          new_version=${new_version%"~${suite}_amd64.deb"}
+          : "${new_version:?could not parse the deb version from $core}"
+
+          # Refuse to bump to an incomplete release: every matrixed PHP line must
+          # have its module .deb checksummed, or the build would fail later.
+          for php in $PHP_LINES; do
+            entry="unit-php${php}_${new_version}~${suite}_amd64.deb"
+            grep -qF "$entry" "$work/SHA256SUMS" \
+              || { echo "ERROR: release $new_release has no entry for $entry" >&2; exit 1; }
+          done
+
+          echo "new version: $new_version"
+          echo "new digest:  $new_digest"
+
+          # Patch the three ARGs in place.
+          sed -i \
+            -e "s|^ARG FREEUNIT_VERSION=.*|ARG FREEUNIT_VERSION=${new_version}|" \
+            -e "s|^ARG FREEUNIT_RELEASE=.*|ARG FREEUNIT_RELEASE=${new_release}|" \
+            -e "s|^ARG FREEUNIT_SHA256SUMS_SHA256=.*|ARG FREEUNIT_SHA256SUMS_SHA256=${new_digest}|" \
+            Dockerfile
+
+          if git diff --quiet -- Dockerfile; then
+            echo "Dockerfile unchanged after patch, nothing to commit"
+            exit 0
+          fi
+
+          # Commit on a fresh branch and open the PR. Push over an explicit
+          # tokenized URL so checkout can keep persist-credentials: false.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add Dockerfile
+          git commit -m "build(deps): bump FreeUnit to ${new_release}
+
+          Bumps the prebuilt FreeUnit .deb release this image installs.
+
+          - FREEUNIT_VERSION: ${cur_version} -> ${new_version}
+          - FREEUNIT_RELEASE: ${cur_release} -> ${new_release}
+          - FREEUNIT_SHA256SUMS_SHA256 recomputed from the new release's SHA256SUMS"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${branch}"
+
+          gh pr create \
+            --head "$branch" \
+            --base "${GITHUB_REF_NAME}" \
+            --title "build(deps): bump FreeUnit to ${new_release}" \
+            --body "Automated bump of the FreeUnit prebuilt \`.deb\` release.
+
+          | arg | from | to |
+          | --- | --- | --- |
+          | \`FREEUNIT_VERSION\` | \`${cur_version}\` | \`${new_version}\` |
+          | \`FREEUNIT_RELEASE\` | \`${cur_release}\` | \`${new_release}\` |
+          | \`FREEUNIT_SHA256SUMS_SHA256\` | (recomputed) | \`${new_digest}\` |
+
+          The new digest was recomputed from [\`SHA256SUMS\`](${base}/SHA256SUMS) and every matrixed PHP line (\`${PHP_LINES}\`) was confirmed present in it.
+
+          > [!IMPORTANT]
+          > CI does not run automatically on this PR (it was opened with \`GITHUB_TOKEN\`). Close/reopen it or push an empty commit to trigger the build + smoke matrix, which downloads and checksum-verifies the \`.deb\`s." \
+            --label dependencies
+
+          rm -rf "$work"

@@ -22,7 +22,10 @@ jobs:
   images:
     runs-on: ubuntu-latest
     permissions:
+      contents: read # checkout
       packages: write # push to GHCR via the built-in GITHUB_TOKEN
+      id-token: write # keyless (OIDC) signing for the attestations below
+      attestations: write # record the provenance + SBOM attestations
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +80,43 @@ jobs:
             docker push "$IMAGE:latest"
             docker push "$IMAGE:${VERSION}"
           fi
+          # All tags for this PHP leg point at one image; resolve its registry
+          # digest once so the attestations below bind to the manifest, not a
+          # mutable tag. Export the local ref too for the SBOM scan.
+          digest=$(docker buildx imagetools inspect "$immutable" --format '{{ .Manifest.Digest }}')
+          {
+            echo "IMAGE_DIGEST=$digest"
+            echo "IMAGE_REF=$immutable"
+          } >> "$GITHUB_ENV"
+
+      # Scan the just-built image into an SPDX SBOM (from the local daemon, so no
+      # re-pull). Artifact upload is off: the SBOM is published as an attestation
+      # below, and parallel matrix legs would collide on a shared artifact name.
+      - name: generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.IMAGE_REF }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      # Keyless (OIDC) provenance + SBOM attestations, pushed to GHCR as OCI
+      # referrers of the image manifest. Verify with:
+      #   gh attestation verify oci://$IMAGE@$DIGEST --owner <owner>
+      - name: attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          push-to-registry: true
+
+      - name: attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
 
       - name: log out of GHCR
         if: always()
