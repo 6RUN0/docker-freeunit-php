@@ -34,6 +34,16 @@ release records the FreeUnit and PHP versions it ships.
   of rebuilding from scratch; the trivy scan reuses the 8.4 image rather than its
   own build.
 
+### Fixed
+
+- The container aborted on startup under the README's own hardening recipe
+  (`--cap-drop=ALL …`): `/var/lib/unit` was owned by `unit:unit`, so the root
+  `unitd` master — stripped of `CAP_DAC_OVERRIDE` by the dropped capabilities —
+  could not create its `certs/` and `scripts/` stores (`mkdir … EACCES`) and
+  failed to store the configuration. The state directory is now kept root-owned
+  (the master is root by design), so cap-dropped startup works; the per-app
+  worker still drops to `unit` via the Unit config.
+
 ## [0.0.2] - 2026-06-08
 
 ### Added

@@ -187,10 +187,13 @@ RUN \
     /var/log/dpkg.log \
     ; \
     # the unit package postinst creates the unit:unit system user/group
-    # preparing state directory
+    # State directory: kept root-owned so the root unitd master can create its
+    # certs/ and scripts/ stores even under --cap-drop=ALL, which strips
+    # CAP_DAC_OVERRIDE (a unit-owned statedir would make those mkdirs fail with
+    # EACCES, breaking startup). The per-app worker drops to 'unit' via the Unit
+    # config's user/group keys, not via statedir ownership.
     rm -rf /var/lib/unit; \
     mkdir -p /var/lib/unit; \
-    chown -R unit:unit /var/lib/unit; \
     # preparing init dir
     mkdir -p /docker-entrypoint.d; \
     # log to stdout
