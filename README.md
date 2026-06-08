@@ -19,6 +19,30 @@ A single parameterized `Dockerfile` covers the whole matrix via build args; the
 
 [upstream]: https://github.com/freeunitorg/freeunit
 
+## Pull
+
+Pre-built images are published to the GitHub Container Registry at
+`ghcr.io/6run0/freeunit-php`. Each release pushes one image per PHP line
+(8.3 / 8.4 / 8.5) under several tags, so you can pin as loosely or as tightly as
+you need:
+
+| Tag pattern | Example | Resolves to |
+|-------------|---------|-------------|
+| `latest` | `ghcr.io/6run0/freeunit-php` | newest release, default PHP (8.4) |
+| `<version>` | `:0.0.2` | that repo release, default PHP |
+| `<suite>-php<X.Y>` | `:trixie-php8.3` | newest release on a PHP line (moves forward) |
+| `<version>-php<X.Y>` | `:0.0.2-php8.3` | a repo release on a PHP line |
+| `<suite>-<freeunit-release>-php<X.Y>` | `:trixie-1.35.5-build4-php8.5` | a specific FreeUnit build on a PHP line |
+
+```bash
+docker pull ghcr.io/6run0/freeunit-php:trixie-php8.4
+```
+
+The `latest` and `<suite>-php<X.Y>` tags float — a later release re-points them.
+The `<version>…` and `…-<freeunit-release>…` tags stay pinned to one release. For
+a byte-stable deploy pin by digest (`…@sha256:…`) — that is also the form
+`gh attestation verify` checks (see the Notes section).
+
 ## Build
 
 ```bash
@@ -120,7 +144,17 @@ root inside the container.
   base and the PHP packages from deb.sury.org are rolling and `apt full-upgrade`
   runs at build time, so two builds of the same tag are not bit-reproducible.
 - The `.deb` integrity check is a SHA256 match against the release's own
-  `SHA256SUMS` (integrity, not authenticity — there is no upstream signature).
+  `SHA256SUMS`, itself pinned in-repo by digest so a tampered release can't supply
+  a matching checksum file (integrity, not upstream authenticity — there is no
+  FreeUnit signature).
+- **Published images carry attestations.** Each image pushed to GHCR by the
+  release workflow records keyless build-provenance and an SPDX SBOM as Sigstore
+  attestations. Verify a pulled image before trusting it:
+
+  ```bash
+  gh attestation verify \
+    oci://ghcr.io/6run0/freeunit-php@<digest> --owner 6RUN0
+  ```
 
 ## See also
 

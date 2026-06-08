@@ -10,6 +10,30 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+### Added
+
+- Supply-chain attestations on release: `release.yml` now generates an SPDX SBOM
+  for each pushed image and records keyless (OIDC) build-provenance and SBOM
+  attestations, pushed to GHCR as OCI referrers of the image manifest. Verify a
+  pulled image with
+  `gh attestation verify oci://ghcr.io/6run0/freeunit-php@<digest> --owner 6RUN0`.
+- `.github/workflows/check-upstream.yml`: a weekly (and manually dispatchable)
+  job that watches the FreeUnit package repo for a new release and opens a bump
+  PR — it recomputes the pinned `FREEUNIT_SHA256SUMS_SHA256` trust anchor and
+  refuses to bump unless every matrixed PHP line ships a module `.deb` in the new
+  `SHA256SUMS`.
+- `.github/dependabot.yml`: weekly grouped bump PRs for the SHA-pinned GitHub
+  Actions.
+- CI lint job gained workflow and markdown gates: actionlint, zizmor (workflow
+  security audit), and rumdl.
+
+### Changed
+
+- CI build+smoke matrix now runs through Buildx with a per-PHP GitHub Actions
+  layer cache (`type=gha`), so repeat runs reuse the apt/download layers instead
+  of rebuilding from scratch; the trivy scan reuses the 8.4 image rather than its
+  own build.
+
 ## [0.0.2] - 2026-06-08
 
 ### Added

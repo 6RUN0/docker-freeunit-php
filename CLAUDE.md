@@ -64,9 +64,11 @@ release is the unique build id), plus the floating `$(SUITE)-php$*`.
    `uploadprogress`) in a **best-effort** loop (`apt-get install … || echo
    WARNING`), so a missing extension on a newer PHP line does not fail the build.
 4. **final_image** — downloads `unit_*` and `unit-php${PHP_VER}_*` `.deb`s from the
-   FreeUnit GitHub release, verifies them against `SHA256SUMS` (and asserts both
-   expected entries are present with `grep -qF`, so `--ignore-missing` cannot pass
-   vacuously), and `apt-get install`s the two local files (apt pulls
+   FreeUnit GitHub release, verifies `SHA256SUMS` itself against the pinned
+   `FREEUNIT_SHA256SUMS_SHA256` trust anchor (see below), then verifies the `.deb`s
+   against it (asserting both expected entries are present with `grep -qF`, so
+   `--ignore-missing` cannot pass vacuously), and `apt-get install`s the two local
+   files (apt pulls
    `libphp${PHP_VER}-embed` already present and the virtual `unit-rX.Y.Z` provided
    by the core package). Then it prepares `/var/lib/unit` + `/docker-entrypoint.d`,
    symlinks `unit.log` to stdout, `COPY rootfs/ /`, sets OCI `LABEL`s, and sets the
@@ -84,6 +86,13 @@ with `curl -o` into the **`~` name** so `sha256sum -c --ignore-missing` actually
 matches the file. Saving under the `.` name would make the checksum check pass
 **vacuously** (no matching filename → entry skipped) — a silent integrity hole.
 In the `RUN`: `deb_ver=${FREEUNIT_VERSION}~${SUITE}`, `asset_ver=${FREEUNIT_VERSION}.${SUITE}`.
+
+`SHA256SUMS` is fetched from the same release it vouches for, so on its own it
+proves nothing — a tampered release could ship a matching `SHA256SUMS`. The
+`FREEUNIT_SHA256SUMS_SHA256` ARG breaks that loop: it pins the SHA256 of the
+trusted `SHA256SUMS` **in version control**, and the build aborts unless the
+fetched file hashes to it. Bumping FreeUnit therefore means recomputing this
+digest too — which is exactly what `check-upstream.yml` automates.
 
 The core `unit` package's `postinst` creates the `unit:unit` system user/group,
 so the Dockerfile does not create it manually.
@@ -113,10 +122,30 @@ in git); users mount or add config snippets into it at runtime.
   `test/fixtures/` PHP app mounted (config into `/docker-entrypoint.d`, code into
   `/www`) and asserts a request is served by PHP. `make test` builds the default
   variant and runs it.
-- **CI** — `.github/workflows/ci.yml` runs lint (hadolint/shellcheck/typos), the
-  build+smoke matrix (8.3/8.4/8.5), and a report-only trivy scan.
+- **CI** — `.github/workflows/ci.yml` runs lint (hadolint, shellcheck, typos,
+  plus actionlint + zizmor for the workflows and rumdl for the markdown), the
+  build+smoke matrix (8.3/8.4/8.5) on Buildx with a per-PHP `type=gha` layer
+  cache, and a report-only trivy scan on the 8.4 leg.
+- **Release** — `.github/workflows/release.yml` (on a `v*` tag) builds + smoke-
+  tests the matrix, pushes the images to GHCR, and records keyless (OIDC)
+  build-provenance + SPDX-SBOM attestations against each image digest (pushed to
+  GHCR as OCI referrers; verify with `gh attestation verify`).
 - `make lint` (hadolint, shellcheck, rumdl, typos) and `make scan` (trivy/grype,
-  best-effort) are available locally.
+  best-effort) are available locally — note actionlint/zizmor run in CI only.
+
+## Automation
+
+- `.github/workflows/check-upstream.yml` — weekly cron (+ `workflow_dispatch`)
+  that watches `6RUN0/freeunit` for a newer release and opens a `chore/freeunit-*`
+  bump PR: it patches `FREEUNIT_VERSION` / `FREEUNIT_RELEASE` and **recomputes the
+  `FREEUNIT_SHA256SUMS_SHA256` trust anchor**, refusing to bump unless every
+  matrixed PHP line (`PHP_LINES`) has a module `.deb` in the new `SHA256SUMS`. The
+  PR is opened with `GITHUB_TOKEN`, whose events do not trigger other workflows, so
+  CI does **not** run on it automatically — close/reopen the PR (or push an empty
+  commit) to kick the build + checksum-verify matrix.
+- `.github/dependabot.yml` — weekly grouped bumps for the SHA-pinned GitHub
+  Actions only (the docker manager can't parse the ARG-interpolated `FROM`, and
+  the FreeUnit `.deb` bump is `check-upstream.yml`'s job).
 
 ## Gotchas
 
