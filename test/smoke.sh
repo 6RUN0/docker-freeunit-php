@@ -175,11 +175,23 @@ fi
 echo "==> *.sh executed (marker: $script_out)"
 
 # *.pem: assert the entrypoint uploaded the bundle, visible via the control API.
+# The control socket is served by Unit's controller, which after the post-config
+# daemon restart can come up a moment later than the router that already answered
+# the HTTP request above, so poll instead of probing once (otherwise flaky on a
+# slow runner).
 if [ -n "$cert_check" ]; then
     echo "==> verifying the entrypoint uploaded the *.pem certificate bundle"
-    if ! docker exec "$CONTAINER" curl -fsS -o /dev/null \
-        --unix-socket /var/run/control.unit.sock \
-        "http://localhost/certificates/$CERT_NAME" 2>/dev/null; then
+    cert_ok=
+    for _ in $(seq 1 30); do
+        if docker exec "$CONTAINER" curl -fsS -o /dev/null \
+            --unix-socket /var/run/control.unit.sock \
+            "http://localhost/certificates/$CERT_NAME" 2>/dev/null; then
+            cert_ok=1
+            break
+        fi
+        sleep 1
+    done
+    if [ -z "$cert_ok" ]; then
         echo "FAIL: certificate '$CERT_NAME' not retrievable from the control API" >&2
         echo "---- container logs ----" >&2
         docker logs "$CONTAINER" >&2 || true
