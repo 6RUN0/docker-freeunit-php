@@ -10,6 +10,8 @@
 
 ## [Не выпущено]
 
+## [0.0.3] - 2026-06-08
+
 ### Добавлено
 
 - Аттестации цепочки поставки при релизе: `release.yml` теперь генерирует
@@ -132,6 +134,7 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/6RUN0/docker-freeunit-php/releases/tag/v0.0.1

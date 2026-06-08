@@ -10,6 +10,8 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-06-08
+
 ### Added
 
 - Supply-chain attestations on release: `release.yml` now generates an SPDX SBOM
@@ -125,6 +127,7 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/6RUN0/docker-freeunit-php/releases/tag/v0.0.1
