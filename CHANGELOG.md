@@ -52,6 +52,9 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
   throwaway certificate (no private key committed).
 - CI workflow (`.github/workflows/ci.yml`): lint (hadolint / shellcheck / typos),
   the build + smoke matrix (8.3 / 8.4 / 8.5), and a report-only trivy scan.
+- Tag-driven release workflow (`.github/workflows/release.yml`): on a `v*` tag,
+  builds and smoke-tests the matrix, publishes the images to GHCR, and creates a
+  GitHub Release with notes from the matching `CHANGELOG.md` section.
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
