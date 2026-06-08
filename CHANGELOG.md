@@ -42,6 +42,10 @@ release records the FreeUnit and PHP versions it ships.
   layer cache (`type=gha`), so repeat runs reuse the apt/download layers instead
   of rebuilding from scratch; the trivy scan reuses the 8.4 image rather than its
   own build.
+- The smoke test now runs the container under the documented hardening
+  (`--cap-drop=ALL …`), so a regression that breaks cap-dropped startup (such as
+  a non-root-owned state directory) is caught in CI; the `*.pem` upload it already
+  asserts exercises the affected certs store.
 
 ### Fixed
 

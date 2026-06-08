@@ -114,8 +114,18 @@ if [ -n "$do_build" ]; then
 fi
 
 echo "==> starting $CONTAINER from $IMAGE_REF"
+# Run under the hardened posture the README documents: drop all capabilities,
+# keep only the two the root unitd master needs to drop workers to the app
+# user/group, and forbid privilege escalation. This doubles as a regression
+# guard -- --cap-drop=ALL strips CAP_DAC_OVERRIDE, so a non-root-owned
+# /var/lib/unit would make the master fail to create its certs/scripts stores
+# (the *.pem upload asserted below exercises exactly that path), which an
+# unhardened run cannot catch.
 docker run -d --name "$CONTAINER" \
     -p 127.0.0.1::8080 \
+    --cap-drop=ALL \
+    --cap-add=SETUID --cap-add=SETGID \
+    --security-opt=no-new-privileges \
     -v "$FIXTURES/www:/www:ro" \
     -v "$entrypoint_d:/docker-entrypoint.d:ro" \
     "$IMAGE_REF" >/dev/null
