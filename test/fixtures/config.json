@@ -1,0 +1,14 @@
+{
+    "listeners": {
+        "*:8080": {
+            "pass": "applications/smoke"
+        }
+    },
+    "applications": {
+        "smoke": {
+            "type": "php",
+            "root": "/www/",
+            "script": "index.php"
+        }
+    }
+}

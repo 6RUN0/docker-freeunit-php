@@ -1,0 +1,5 @@
+# The build context is the repo root, but only rootfs/ is copied into the
+# image (COPY rootfs/ /). Allowlist it and exclude everything else so new
+# top-level files never silently enter the context.
+*
+!rootfs/

@@ -1,0 +1,3 @@
+# The entrypoint sources a file by its absolute in-container path, which the
+# linter cannot resolve from the source tree.
+disable=SC1091
