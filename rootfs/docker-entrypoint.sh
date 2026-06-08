@@ -75,7 +75,9 @@ if [ "$1" = "unitd" ] || [ "$1" = "unitd-debug" ]; then
             # Guard symmetrically with the trap (see config_failed): an empty or
             # missing pidfile must not abort the script under `set -e` and trip
             # the EXIT trap, which would wipe the successfully-configured state.
-            [ -f /var/run/unit.pid ] && kill -TERM "$(cat /var/run/unit.pid)" 2>/dev/null || true
+            if [ -f /var/run/unit.pid ]; then
+                kill -TERM "$(cat /var/run/unit.pid)" 2>/dev/null || true
+            fi
 
             while [ -S /var/run/control.unit.sock ]; do
                 ngx_info "waiting for control socket to be removed..."
