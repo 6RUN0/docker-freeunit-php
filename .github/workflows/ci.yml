@@ -23,6 +23,36 @@ jobs:
         with:
           persist-credentials: false
 
+      # The PHP matrix is hand-listed in several places; the Makefile's
+      # PHP_VERSIONS is the single source of truth. Assert every workflow that
+      # repeats it (this file, release.yml, security-scan.yml) and the
+      # check-upstream.yml PHP_LINES completeness gate agree with it, so a drift
+      # cannot silently build, scan, or release a different PHP set than the bump
+      # bot verifies. Each list is reduced to its sorted X.Y tokens and compared.
+      - name: check PHP matrix is in sync
+        run: |
+          set -euo pipefail
+          norm() { grep -oE '[0-9]+\.[0-9]+' | sort -u | tr '\n' ' '; }
+          expected=$(sed -n 's/^PHP_VERSIONS ?= //p' Makefile | norm)
+          : "${expected:?could not read PHP_VERSIONS from Makefile}"
+          echo "expected (Makefile PHP_VERSIONS): [${expected}]"
+          status=0
+          check() { # <file> <line-pattern> <label>
+            local got
+            got=$(grep -E "$2" "$1" | norm)
+            if [ "$got" != "$expected" ]; then
+              echo "::error file=$1::PHP matrix [${got}] != Makefile [${expected}] ($3)"
+              status=1
+            else
+              echo "ok: $1 ($3)"
+            fi
+          }
+          check .github/workflows/ci.yml             '^[[:space:]]*php: \[' 'build-test matrix'
+          check .github/workflows/release.yml        '^[[:space:]]*php: \[' 'images matrix'
+          check .github/workflows/security-scan.yml  '^[[:space:]]*php: \[' 'trivy matrix'
+          check .github/workflows/check-upstream.yml '^[[:space:]]*PHP_LINES:' 'completeness gate'
+          exit "$status"
+
       - name: hadolint
         uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:

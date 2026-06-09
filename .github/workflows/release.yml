@@ -42,13 +42,23 @@ jobs:
       # requires a lowercase image path, hence the owner is downcased.
       - name: derive image coordinates
         run: |
+          set -euo pipefail
           owner=${GITHUB_REPOSITORY_OWNER,,}
+          # Guard each extraction: a drifted ARG format (quoting, inline comment,
+          # spaces around =) would otherwise emit an empty value and silently push
+          # a malformed tag. Fail loudly instead, mirroring check-upstream.yml.
+          suite=$(sed -n 's/^ARG SUITE=//p' Dockerfile)
+          default_php=$(sed -n 's/^ARG PHP_VER=//p' Dockerfile)
+          freeunit_release=$(sed -n 's/^ARG FREEUNIT_RELEASE=//p' Dockerfile)
+          : "${suite:?could not read ARG SUITE from Dockerfile}"
+          : "${default_php:?could not read ARG PHP_VER from Dockerfile}"
+          : "${freeunit_release:?could not read ARG FREEUNIT_RELEASE from Dockerfile}"
           {
             echo "IMAGE=${REGISTRY}/${owner}/freeunit-php"
             echo "VERSION=${GITHUB_REF_NAME#v}"
-            echo "SUITE=$(sed -n 's/^ARG SUITE=//p' Dockerfile)"
-            echo "DEFAULT_PHP=$(sed -n 's/^ARG PHP_VER=//p' Dockerfile)"
-            echo "FREEUNIT_RELEASE=$(sed -n 's/^ARG FREEUNIT_RELEASE=//p' Dockerfile)"
+            echo "SUITE=${suite}"
+            echo "DEFAULT_PHP=${default_php}"
+            echo "FREEUNIT_RELEASE=${freeunit_release}"
           } >> "$GITHUB_ENV"
 
       # Reuses the Makefile target: builds php$PHP with the immutable and
