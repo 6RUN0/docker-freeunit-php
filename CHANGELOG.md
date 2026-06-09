@@ -10,6 +10,44 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-06-09
+
+### Added
+
+- `examples/` grew into a capability-coverage set: `dev` (a live-mounted
+  development loop writing to a persistent state volume as the unprivileged app
+  user), `routing` (multiple apps behind path routes, static-asset serving, and a
+  per-app PHP `memory_limit`), and `web-app` (HTTPS from an entrypoint-generated
+  self-signed certificate, with an HTTP-to-HTTPS redirect), alongside the existing
+  `basic` and `cron-hook`. Each example is a self-contained subdirectory with its
+  own README.
+- `make test-examples`: an examples gate that statically lints every example's
+  compose file for the capability-hardening block (`cap_drop`, `no-new-privileges`,
+  `SETUID`, `SETGID`), then builds, runs, and asserts each example end to end
+  against the just-built image.
+- `make help`: a self-documenting target list parsed from the `##`-prefixed
+  comment annotations on the targets themselves.
+
+### Changed
+
+- The `cron-hook` example fires its task every second using supercronic's
+  seven-field (seconds) crontab syntax, so the example and its test no longer wait
+  out a full minute for a tick.
+- CI asserts the PHP build matrix is in sync across `ci.yml`, `release.yml`,
+  `security-scan.yml`, and `check-upstream.yml`'s completeness gate against the
+  Makefile's `PHP_VERSIONS`, failing the lint job on any drift.
+- `release.yml` guards each Dockerfile-ARG extraction, failing loudly rather than
+  pushing a malformed tag if an ARG line format ever drifts.
+- Repository hygiene: added `.gitattributes`, tightened `.editorconfig`, and
+  ignored the `docs/superpowers/` working notes.
+
+### Fixed
+
+- Documentation: corrected the deb.sury.org pin priority described in `CLAUDE.md`
+  (990, not 1001 — below 1000 so a compromised mirror cannot force a downgrade) and
+  the stale crontab field-count comments in the examples test, aligning the docs
+  with the shipped `Dockerfile` and crontab.
+
 ## [0.0.4] - 2026-06-09
 
 ### Added
@@ -185,7 +223,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...v0.0.2
