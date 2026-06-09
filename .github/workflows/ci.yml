@@ -28,8 +28,26 @@ jobs:
         with:
           dockerfile: Dockerfile
 
+      # Pin shellcheck to the version used locally so CI mirrors `make lint`.
+      # The runner's bundled shellcheck is older and emits false positives that
+      # current releases correctly suppress: SC2120/SC2119 on the library's
+      # optional-argument functions (called with args only from child hooks
+      # shellcheck cannot see) and SC2317 on trap/dispatch-invoked functions.
+      # Fetch the official static binary and verify its SHA256, mirroring how the
+      # Dockerfile fetches and checks its release assets.
       - name: shellcheck
-        run: shellcheck rootfs/*.sh test/*.sh
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          set -euo pipefail
+          tarball="shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${tarball}"
+          echo "${SHELLCHECK_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xJf "$tarball"
+          "shellcheck-${SHELLCHECK_VERSION}/shellcheck" --version
+          "shellcheck-${SHELLCHECK_VERSION}/shellcheck" rootfs/*.sh test/*.sh
 
       - name: typos
         uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
@@ -51,7 +69,7 @@ jobs:
       - name: rumdl (markdown)
         run: |
           pipx install rumdl==0.2.9
-          rumdl check ./*.md ./examples/*.md
+          rumdl check ./*.md ./examples/*.md ./examples/*/*.md
 
   build-test:
     runs-on: ubuntu-latest
