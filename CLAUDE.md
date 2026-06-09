@@ -103,16 +103,77 @@ so the Dockerfile does not create it manually.
 `COPY rootfs/ /`. Anything baked into the image (entrypoint scripts, configs)
 lives there at its target path:
 
-- `rootfs/docker-entrypoint.sh` — on first start (when `/var/lib/unit` is empty)
-  launches unitd against the control socket and applies everything in
-  `/docker-entrypoint.d/`: `*.sh` executed, `*.pem` uploaded as certificate
-  bundles, `*.json` PUT to `config` via the control socket; then unitd restarts.
-- `rootfs/docker-entrypoint-common.sh` — `ngx_*` logging helpers, `curl_put`
-  (control-socket PUT with status checking), and `APPLICATION_USER/UID/GROUP/GID/
-  DIR/CHOWN` handling that creates the app user and optionally chowns the app dir.
+- `rootfs/docker-entrypoint.sh` — a thin dispatcher. It sources every `*.sh` in
+  the **hook dir** (see below), then calls `dispatch_handler` (in the core
+  library): if a sourced file defined a shell function `handle_<cmd>` matching
+  `$1`, that handler owns the launch (it must `exec`, and a return or a non-zero
+  exit is a fatal contract violation);
+  otherwise, for `unitd`/`unitd-debug` it runs the standard first-run routine
+  (`unit_initial_configuration`) and `exec`s the command. The first-run routine
+  only fires when `/var/lib/unit` is empty: it launches unitd against the control
+  socket and applies everything in `/docker-entrypoint.d/` (`*.sh` executed,
+  `*.pem` uploaded as certificate bundles, `*.json` PUT to `config`), then stops
+  unitd so the real start boots a populated state.
+- `rootfs/docker-entrypoint-common.sh` — the reusable **core library** sourced by
+  the entrypoint (and available to child hooks). Every function takes its target
+  as an argument, defaulting to the `UNIT_*` / `ENTRYPOINT_*` constants, so a
+  child can retarget it. Groups:
+  - logging: `log` (takes a level token) + `log_info`/`log_notice`/`log_warn`;
+    `die` logs at err level and exits.
+  - control API: `curl_put <file> <endpoint> [socket]`.
+  - fs helpers: `dir_has_content <dir>`, `is_first_run [statedir]`.
+  - daemon lifecycle: `start_unit <binary> [socket] [pidfile]`,
+    `wait_for_control_socket [socket]`, `stop_unit [pidfile] [socket]`;
+    `read_pid <pidfile>` yields a single, validated numeric pid (decoupled from
+    `read`'s exit status, so a newline-less pidfile still works; non-numeric is
+    ignored).
+  - `/docker-entrypoint.d` appliers: `run_entrypoint_scripts [dir]` (*.sh, no
+    daemon needed), `apply_certificates [dir]` (*.pem; basename validated to
+    `[A-Za-z0-9._-]` before it becomes a control-API path segment),
+    `apply_config [dir]` (*.json; warns when >1 file, since `PUT /config`
+    replaces the whole config so only the last wins) — the last two need a ready
+    daemon.
+  - command dispatch: `dispatch_handler <cmd> [args…]` runs a hook's
+    `handle_<cmd>` (which must `exec`); it `die`s if the handler returns or exits
+    non-zero without exec'ing, and is a no-op when no handler matches.
+  - privilege drop: `exec_as_user <user> <group> <cmd…>` via `setpriv`
+    (`--init-groups --no-new-privs`; gosu/su-exec are intentionally absent).
+  - user provisioning: `setup_user <user> <uid> <group> <gid> [dir] [chown]` —
+    idempotent; a child hook calls it to create a *different* app user.
+  - `unit_initial_configuration <binary>` is the full first-run routine composed
+    from the above, guarded by its `unit_config_failed` EXIT trap.
+  On source it provisions the default app user from `APPLICATION_USER/UID/GROUP/
+  GID/DIR/CHOWN` by calling `setup_user` with them.
 
 `/docker-entrypoint.d` itself is created by the `RUN` (empty dirs are not tracked
 in git); users mount or add config snippets into it at runtime.
+
+### Entrypoint extension contract (hook dir)
+
+`/docker-entrypoint-hook.d/` is the **entrypoint extension** dir, created by the
+same `RUN` and kept separate from the runtime-config `/docker-entrypoint.d/`. A
+downstream image adds a launch mode by `COPY`ing one `*.sh` file there that
+defines `handle_<cmd>` — e.g. a `handle_supercronic` that runs
+`run_entrypoint_scripts` then `exec`s a cron runner. Child images do **not**
+overwrite `/docker-entrypoint.sh`, so every robustness/security fix to the base
+entrypoint reaches them automatically.
+
+The entrypoint **sources** each hook into its own shell, so authors must respect
+the contract (the entrypoint enforces the first two):
+
+- A hook file must **only define `handle_*` functions** — no top-level side
+  effects. Top-level code runs as root before dispatch; a non-zero last command
+  aborts startup (the loop reports which hook with `die`).
+- A `handle_<cmd>` **must `exec`** the final process. Returning (or exiting
+  non-zero) is a fatal contract violation — `dispatch_handler` errors out rather
+  than silently re-running the raw command.
+- Hooks share scope with the base: do **not** set a bare `trap` (it collides
+  with the first-run EXIT trap) and do **not** shadow the core library function
+  names (listed above) or the `UNIT_*` / `ENTRYPOINT_*` / `APPLICATION_*`
+  variables; prefix private helpers/vars. The hook dir path is a
+  build-time constant (not env-overridable), since the loop sources as root.
+
+The two reusable routines above are the public surface handlers build on.
 
 ## Verification
 
@@ -120,14 +181,28 @@ in git); users mount or add config snippets into it at runtime.
   successful build proves the daemon and module load.
 - **Smoke test** — `test/smoke.sh <image-ref>` runs the image with the
   `test/fixtures/` PHP app mounted (config into `/docker-entrypoint.d`, code into
-  `/www`) and asserts a request is served by PHP. `make test` builds the default
-  variant and runs it.
+  `/www`) and asserts a request is served by PHP — the entrypoint's happy path.
+- **Entrypoint-library unit checks** — `test/entrypoint-lib.sh <image-ref>` covers
+  the paths of `docker-entrypoint-common.sh` the smoke test cannot reach: a
+  non-executable `*.sh` dies actionably; `read_pid`/`stop_unit` handle empty,
+  multi-line, newline-less and non-numeric pidfiles; `wait_for_control_socket`
+  bounds its wait; `stop_unit` escalates to SIGKILL; `dispatch_handler` enforces
+  the hook exec-contract; `exec_as_user` drops privileges; `setup_user` validates
+  ids and is idempotent; `dir_has_content` gets the empty/non-empty boundary
+  right. It is a pytest-style shell suite (auto-discovered `test_*` functions,
+  `assert_*` helpers, per-test process isolation) that re-execs itself inside the
+  image so the real library is sourced as shipped. The host-side CLI parser and
+  image build it shares with `test/smoke.sh` live in `test/lib.sh`. `make test`
+  builds the default variant and runs both; `make test-entrypoint` runs only this
+  suite against an already-built image.
 - **CI** — `.github/workflows/ci.yml` runs lint (hadolint, shellcheck, typos,
   plus actionlint + zizmor for the workflows and rumdl for the markdown), the
-  build+smoke matrix (8.3/8.4/8.5) on Buildx with a per-PHP `type=gha` layer
-  cache, and a report-only trivy scan on the 8.4 leg.
-- **Release** — `.github/workflows/release.yml` (on a `v*` tag) builds + smoke-
-  tests the matrix, pushes the images to GHCR, and records keyless (OIDC)
+  build+test matrix (8.3/8.4/8.5, via `make test` so smoke + entrypoint checks
+  run on every PHP line) on Buildx with a per-PHP `type=gha` layer cache, and a
+  report-only trivy scan on the 8.4 leg.
+- **Release** — `.github/workflows/release.yml` (on a `v*` tag) builds + tests
+  the matrix (`make test`, so both suites run), pushes the images to GHCR, and
+  records keyless (OIDC)
   build-provenance + SPDX-SBOM attestations against each image digest (pushed to
   GHCR as OCI referrers; verify with `gh attestation verify`).
 - `make lint` (hadolint, shellcheck, rumdl, typos) and `make scan` (trivy/grype,

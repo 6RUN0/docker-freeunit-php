@@ -3,7 +3,8 @@
 #   make              # build all PHP versions
 #   make php8.3       # build one variant
 #   make latest       # build the default PHP and tag it :latest
-#   make test         # build the default PHP and run the integration smoke test
+#   make test         # build the default PHP and run the smoke + entrypoint tests
+#   make test-entrypoint  # run the entrypoint-library unit checks (image must exist)
 #   make lint         # run all installed linters
 #   make scan         # CVE-scan the default image (trivy/grype if installed)
 #
@@ -37,7 +38,7 @@ SHELL_SCRIPTS := $(shell find rootfs test -type f -name '*.sh' 2>/dev/null)
 
 DEFAULT_IMAGE := $(IMAGE):$(SUITE)-php$(DEFAULT_PHP)
 
-.PHONY: all latest test scan lint lint-dockerfile lint-shell lint-md lint-typos $(TARGETS)
+.PHONY: all latest test test-entrypoint scan lint lint-dockerfile lint-shell lint-md lint-typos $(TARGETS)
 
 all: $(TARGETS)
 
@@ -58,9 +59,16 @@ $(TARGETS): php%:
 latest: php$(DEFAULT_PHP)
 	docker tag $(DEFAULT_IMAGE) $(IMAGE):latest
 
-# Build the default variant and run the end-to-end smoke test against it.
+# Build the default variant and run the integration tests against it: the
+# end-to-end smoke test (happy path) plus the entrypoint-library unit checks
+# (error/timeout paths the smoke test cannot reach).
 test: php$(DEFAULT_PHP)
 	./test/smoke.sh $(DEFAULT_IMAGE)
+	./test/entrypoint-lib.sh $(DEFAULT_IMAGE)
+
+# Run just the entrypoint-library unit checks against an already-built image.
+test-entrypoint:
+	./test/entrypoint-lib.sh $(DEFAULT_IMAGE)
 
 # CVE-scan the default image. Skipped (not failed) if no scanner is installed.
 scan:

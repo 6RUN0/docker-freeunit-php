@@ -107,6 +107,10 @@ Files are applied in lexical order, by extension:
 
 Other file types are logged and ignored.
 
+> Multiple `*.json` are **not** merged: `PUT /config` replaces the whole
+> configuration, so only the lexically-last file takes effect (the entrypoint
+> warns when it sees more than one). Ship a single combined config file.
+
 ### Environment variables
 
 These are the image's runtime API; they are read by the entrypoint.

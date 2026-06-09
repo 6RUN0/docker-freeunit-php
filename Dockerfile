@@ -196,6 +196,9 @@ RUN \
     mkdir -p /var/lib/unit; \
     # preparing init dir
     mkdir -p /docker-entrypoint.d; \
+    # entrypoint extension dir: child images drop *.sh handlers here (see
+    # rootfs/docker-entrypoint.sh); kept separate from the runtime-config dir above
+    mkdir -p /docker-entrypoint-hook.d; \
     # log to stdout
     ln -sf /dev/stdout /var/log/unit.log; \
     unitd --version; \

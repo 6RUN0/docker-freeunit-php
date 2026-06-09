@@ -10,6 +10,47 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+### Added
+
+- `test/entrypoint-lib.sh` gained checks for the hook dispatch contract
+  (`dispatch_handler`), the `exec_as_user` privilege drop, `setup_user` id
+  validation and idempotency, the `dir_has_content` empty/non-empty boundary, and
+  newline-less / non-numeric pidfiles. The host-side CLI parser and image build
+  shared by both test drivers were extracted into `test/lib.sh`.
+
+### Changed
+
+- `apply_config` now warns when more than one `*.json` is present in
+  `/docker-entrypoint.d`, since `PUT /config` replaces the whole configuration and
+  only the lexically-last file survives.
+- `wait_for_control_socket` bounds each probe with `curl --max-time`, and
+  `run_entrypoint_scripts` now reports which user script failed.
+
+### Fixed
+
+- A child-hook `handle_<cmd>` that exits non-zero no longer aborts the entrypoint
+  silently under `set -e` before its diagnostic. Dispatch moved into
+  `dispatch_handler`, which reports both a non-zero exit and a return-without-exec
+  with an actionable message.
+- `stop_unit` no longer skips `kill -TERM` when the pidfile has no trailing
+  newline (`read` returns non-zero at EOF even after assigning the value). The new
+  `read_pid` helper decouples the value from `read`'s exit status and ignores a
+  non-numeric pid, so a corrupt pidfile cannot become a broad kill.
+- `dir_has_content` treats an existing-but-unreadable directory as an error rather
+  than "empty", so a transient `EACCES` on the state dir cannot trigger a
+  re-initialisation over a populated state.
+
+### Security
+
+- `exec_as_user` now passes `setpriv --no-new-privs`, so a child-image hook's
+  privilege drop is irreversible inside the image even if the operator omits
+  `--security-opt=no-new-privileges`.
+- The first-run failure wipe (`find … -delete`) gained `-xdev`, so it stops at
+  filesystem boundaries and never deletes through a host volume bind-mounted
+  inside `/var/lib/unit`.
+- `apply_certificates` validates the bundle name to `[A-Za-z0-9._-]`, so a crafted
+  `*.pem` filename cannot retarget the control-API `PUT` at another endpoint.
+
 ## [0.0.3] - 2026-06-08
 
 ### Added
