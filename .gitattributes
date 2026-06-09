@@ -1,0 +1,5 @@
+# All text files use LF line endings, both stored in the repo and on checkout,
+# on every platform. git auto-detects text vs binary, so any binary file is left
+# untouched. This matters because the rootfs/ entrypoint scripts run inside Linux
+# containers, where a CRLF would break the shebang and `source`.
+* text=auto eol=lf
