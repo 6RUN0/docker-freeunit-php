@@ -91,9 +91,15 @@ daemon against the control socket, applies everything in `/docker-entrypoint.d/`
 then restarts the daemon in the foreground. If that initial configuration fails,
 the state directory is wiped so the next start retries cleanly.
 
-A self-contained, security-hardened example (a small `Dockerfile` that bakes an
-app and its config onto the image) is in [`examples/`](examples/) —
-`cd examples && docker compose up --build`.
+Runnable examples are in [`examples/`](examples/), one per subdirectory:
+
+- [`examples/basic/`](examples/basic/) — a self-contained, security-hardened
+  deployment (a small `Dockerfile` bakes an app and its config onto the image):
+  `cd examples/basic && docker compose up --build`.
+- [`examples/cron-hook/`](examples/cron-hook/) — the entrypoint hook system: one
+  image runs in two roles, the Unit web server and a long-lived `supercronic`
+  cron runner, selected per container by the command, with no second image and
+  no forked entrypoint.
 
 ### `/docker-entrypoint.d/` conventions
 
