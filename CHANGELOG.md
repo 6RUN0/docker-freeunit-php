@@ -10,8 +10,20 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-06-09
+
 ### Added
 
+- Extensible entrypoint hook system: a child image adds a launch mode by dropping
+  a `handle_<command>` hook into `/docker-entrypoint-hook.d/` (sourced and
+  ownership-vetted as root before any privilege drop), and the entrypoint became a
+  thin dispatcher over a reusable core library (`docker-entrypoint-common.sh`) of
+  logging, daemon lifecycle, config appliers, privilege drop, and user
+  provisioning. Downstream images inherit every base robustness/security fix
+  without overwriting `/docker-entrypoint.sh`.
+- `examples/cron-hook/`: an example of the hook system — one image runs in two
+  roles, the Unit web server and a long-lived `supercronic` cron runner, selected
+  per container by the command (`supercronic` is pinned and SHA256-verified).
 - `test/entrypoint-lib.sh` gained checks for the hook dispatch contract
   (`dispatch_handler`), the `exec_as_user` privilege drop, `setup_user` id
   validation and idempotency, the `dir_has_content` empty/non-empty boundary, and
@@ -25,6 +37,11 @@ release records the FreeUnit and PHP versions it ships.
   only the lexically-last file survives.
 - `wait_for_control_socket` bounds each probe with `curl --max-time`, and
   `run_entrypoint_scripts` now reports which user script failed.
+- `examples/` reorganised so each example is a self-contained subdirectory
+  (`examples/basic/`, `examples/cron-hook/`) with an index `README.md`.
+- CI pins ShellCheck to the version used locally — the runner's bundled one
+  flagged false positives on the library's optional-argument and
+  trap/dispatch-invoked functions — and now lints each example's `README.md`.
 
 ### Fixed
 
@@ -168,7 +185,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/6RUN0/docker-freeunit-php/releases/tag/v0.0.1
