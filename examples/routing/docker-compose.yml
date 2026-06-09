@@ -1,0 +1,22 @@
+# One image, two PHP apps behind URI routing with a static-file share. Run:
+#
+#   docker compose up --build        # from this directory
+#
+# then:
+#   curl http://localhost:8080/                 # site front controller (diagnostic page)
+#   curl http://localhost:8080/assets/style.css # static file, served directly by `share`
+#   curl http://localhost:8080/admin/           # the second app, different memory_limit
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    cap_drop:
+      - ALL
+    cap_add:
+      # hardening block: keep identical to examples/basic/docker-compose.yml
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

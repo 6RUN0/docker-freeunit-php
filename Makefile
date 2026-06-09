@@ -1,10 +1,12 @@
 # Build the FreeUnit + PHP image matrix from a single Dockerfile.
 #
+#   make help         # list the available targets
 #   make              # build all PHP versions
 #   make php8.3       # build one variant
 #   make latest       # build the default PHP and tag it :latest
 #   make test         # build the default PHP and run the smoke + entrypoint tests
 #   make test-entrypoint  # run the entrypoint-library unit checks (image must exist)
+#   make test-examples    # build the default PHP and verify every examples/ example
 #   make lint         # run all installed linters
 #   make scan         # CVE-scan the default image (trivy/grype if installed)
 #
@@ -38,9 +40,24 @@ SHELL_SCRIPTS := $(shell find rootfs test -type f -name '*.sh' 2>/dev/null)
 
 DEFAULT_IMAGE := $(IMAGE):$(SUITE)-php$(DEFAULT_PHP)
 
-.PHONY: all latest test test-entrypoint scan lint lint-dockerfile lint-shell lint-md lint-typos $(TARGETS)
+.PHONY: help all latest test test-entrypoint test-examples scan lint lint-dockerfile lint-shell lint-md lint-typos $(TARGETS)
 
-all: $(TARGETS)
+# Keep bare `make` building the whole matrix even though `help` is defined first
+# (a target ahead of `all` would otherwise become the default goal).
+.DEFAULT_GOAL := all
+
+# Self-documenting help: lists every target annotated with a `## ` comment, so
+# the description lives on the target line (single source of truth) rather than
+# in a separate hand-synced list. Run `make help` for the menu.
+help: ## list the available targets
+	@echo 'FreeUnit + PHP image matrix. Targets:'
+	@echo
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_.-]+:.*## /{printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo
+	@echo 'Plus one target per PHP version: $(TARGETS)'
+	@echo 'Override defaults on the command line, e.g. make PHP_VERSIONS=8.4 or make SUITE=bookworm.'
+
+all: $(TARGETS) ## build every PHP version (the default target)
 
 # The immutable tag carries FREEUNIT_RELEASE (the unique build id) so rebuilding
 # a different build of the same version does not overwrite an existing tag; the
@@ -56,22 +73,30 @@ $(TARGETS): php%:
 	  -t $(IMAGE):$(SUITE)-php$* \
 	  .
 
-latest: php$(DEFAULT_PHP)
+latest: php$(DEFAULT_PHP) ## build the default PHP and tag it :latest
 	docker tag $(DEFAULT_IMAGE) $(IMAGE):latest
 
 # Build the default variant and run the integration tests against it: the
 # end-to-end smoke test (happy path) plus the entrypoint-library unit checks
 # (error/timeout paths the smoke test cannot reach).
-test: php$(DEFAULT_PHP)
+test: php$(DEFAULT_PHP) ## build the default PHP and run smoke + entrypoint tests
 	./test/smoke.sh $(DEFAULT_IMAGE)
 	./test/entrypoint-lib.sh $(DEFAULT_IMAGE)
 
 # Run just the entrypoint-library unit checks against an already-built image.
-test-entrypoint:
+test-entrypoint: ## run entrypoint-library unit checks (image must exist)
 	./test/entrypoint-lib.sh $(DEFAULT_IMAGE)
 
+# Build the default variant and verify every examples/ example end to end: a
+# static hardening lint over the compose files plus a live build+run+assert of
+# each example. The just-built default image is passed as the base the examples
+# FROM, so this runs without pulling from GHCR. NOT wired into CI (it is a heavier
+# gate); run it locally before touching examples/. Lint only: EXAMPLES_LINT_ONLY=1.
+test-examples: php$(DEFAULT_PHP) ## build the default PHP and verify every examples/ example
+	EXAMPLES_BASE_IMAGE=$(DEFAULT_IMAGE) ./test/examples.sh
+
 # CVE-scan the default image. Skipped (not failed) if no scanner is installed.
-scan:
+scan: ## CVE-scan the default image (trivy/grype if installed)
 	@if command -v trivy >/dev/null 2>&1; then \
 	  echo "trivy image $(DEFAULT_IMAGE)"; \
 	  trivy image --severity HIGH,CRITICAL --exit-code 1 $(DEFAULT_IMAGE); \
@@ -82,7 +107,7 @@ scan:
 
 # Run every linter that is installed (a missing tool is skipped, not an error;
 # an installed tool that reports problems fails the target).
-lint: lint-dockerfile lint-shell lint-md lint-typos
+lint: lint-dockerfile lint-shell lint-md lint-typos ## run all installed linters
 
 lint-dockerfile:
 	@if command -v hadolint >/dev/null 2>&1; then \

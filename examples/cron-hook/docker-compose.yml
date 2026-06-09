@@ -39,11 +39,17 @@ services:
     # handle_supercronic hook, which execs the cron runner instead of Unit. No
     # ports and no Unit config are needed -- this container never starts Unit.
     command: ["supercronic"]
+    # The cron role never starts Unit, so the image's HEALTHCHECK (which probes
+    # the Unit control socket) would mark this container unhealthy forever.
+    # Disable it here; supercronic is the liveness signal for this role.
+    healthcheck:
+      disable: true
     cap_drop:
       - ALL
     cap_add:
-      # The hook drops root -> the app user via setpriv (exec_as_user), which
-      # needs the same two capabilities the Unit master uses in the web role.
+      # The hook provisions a dedicated `worker` user and drops root -> worker via
+      # setpriv (exec_as_user), which needs the same two capabilities the Unit
+      # master uses to drop its workers in the web role.
       - SETUID
       - SETGID
     security_opt:

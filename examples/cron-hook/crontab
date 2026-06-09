@@ -1,7 +1,12 @@
-# supercronic crontab: standard five-field cron syntax. Runs the shared task
-# once a minute; supercronic logs each run to stdout, so `docker compose logs -f
-# cron` shows it firing (allow up to a minute for the first run).
+# supercronic crontab. Unlike classic cron(5), supercronic's parser accepts an
+# optional leading SECONDS field AND a trailing YEAR field, so a full seven-field
+# line schedules sub-minute jobs. This one runs the shared task every second;
+# supercronic logs each run to stdout, so `docker compose logs -f cron` shows it
+# firing within a second (no minute wait).
 #
-#   field order: minute hour day-of-month month day-of-week  command
+#   seven-field order: second minute hour day-of-month month day-of-week year
+#   (the seconds field is ONLY honoured with all seven fields present -- a
+#   six-field line is read as the classic five fields plus year, not seconds, so
+#   it still fires only once a minute; drop to five fields for plain cron(5))
 #
-* * * * * php /www/cron-task.php
+* * * * * * * php /www/cron-task.php

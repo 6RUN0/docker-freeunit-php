@@ -1,3 +1,4 @@
 # Local tooling state (not part of the image build)
 .codegraph/
 .omc/
+docs/superpowers/

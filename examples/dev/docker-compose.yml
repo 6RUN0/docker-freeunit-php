@@ -1,0 +1,55 @@
+# Local development: edit PHP under ./www and reload the page -- no rebuild. Run:
+#
+#   docker compose up --build        # from this directory
+#
+# then open http://localhost:8080/. Edit www/index.php and reload: the change is
+# live, because ./www is bind-mounted and Unit re-reads PHP files per request.
+#
+# Two things are NOT live and DO need a rebuild / recreate:
+#   * the PHP line (PHP_VER in .env) -- it is a build arg: `docker compose up --build`
+#   * config.json -- it is applied only on first start (empty /var/lib/unit), so
+#     to re-apply an edited config run `docker compose down -v` then `up` again.
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Forwarded from .env so the PHP line is chosen without editing files here.
+        PHP_VER: ${PHP_VER}
+    ports:
+      - "8080:8080"
+    environment:
+      # Entrypoint env knobs this example demonstrates:
+      #   QUIET_LOGS silences the entrypoint's own info/notice chatter.
+      UNIT_ENTRYPOINT_QUIET_LOGS: "1"
+      #   APPLICATION_DIR + CHOWN: at startup (as root, before the privilege drop)
+      #   the entrypoint chowns this dir to the app user, so the unprivileged PHP
+      #   worker can write to it. It points at the `data` NAMED VOLUME below, never
+      #   a host bind-mount -- chown=yes rewrites ownership of everything under it.
+      APPLICATION_DIR: /data
+      APPLICATION_CHOWN: "yes"
+    volumes:
+      # App code, bind-mounted read-only: host edits are live (no rebuild).
+      - ./www:/www:ro
+      # Writable app state on a named volume, so the CHOWN demo never touches host
+      # file ownership. index.php writes here to prove the worker can.
+      - data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      # The base hardening block (kept identical to examples/basic): the two caps
+      # the entrypoint needs to drop workers to the app user.
+      - SETUID
+      - SETGID
+      # ONE extra cap, required ONLY because this example uses APPLICATION_CHOWN=yes:
+      # the entrypoint chowns the root-owned /data named volume to the app user at
+      # startup, and cap_drop:[ALL] removed CHOWN. This is the capability cost of
+      # the runtime-chown convenience. The more hardened alternative is to bake the
+      # ownership into the image instead and keep CHOWN dropped -- see the README.
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  data:

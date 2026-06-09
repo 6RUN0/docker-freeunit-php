@@ -1,0 +1,10 @@
+/* A real static file under the share root (/www/public). Requesting
+   /assets/style.css returns THIS file directly via the route's `share` action --
+   it never reaches PHP. That is the proof the static/dynamic split works:
+   existing files are served from disk, everything else falls back to the front
+   controller. */
+body {
+    font-family: system-ui, sans-serif;
+    margin: 2rem auto;
+    max-width: 40rem;
+}

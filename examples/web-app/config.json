@@ -1,0 +1,32 @@
+{
+    "listeners": {
+        "*:8080": {
+            "pass": "routes/redirect"
+        },
+        "*:8443": {
+            "pass": "applications/app",
+            "tls": {
+                "certificate": "webapp"
+            }
+        }
+    },
+    "routes": {
+        "redirect": [
+            {
+                "action": {
+                    "return": 301,
+                    "location": "https://localhost:8443$uri"
+                }
+            }
+        ]
+    },
+    "applications": {
+        "app": {
+            "type": "php",
+            "root": "/www/",
+            "script": "index.php",
+            "user": "unit",
+            "group": "unit"
+        }
+    }
+}

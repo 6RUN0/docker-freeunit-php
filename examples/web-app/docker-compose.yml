@@ -1,0 +1,25 @@
+# HTTPS via the entrypoint applicator chain. Run:
+#
+#   docker compose up --build        # from this directory
+#
+# then:
+#   curl -kI http://localhost:8080/   # 301 redirect to https
+#   curl -k  https://localhost:8443/  # the app, served over TLS
+#
+# `-k` disables certificate verification: the demo cert is self-signed, so it
+# encrypts but does not authenticate. Never use `-k` against a real endpoint.
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    cap_drop:
+      - ALL
+    cap_add:
+      # hardening block: keep identical to examples/basic/docker-compose.yml
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

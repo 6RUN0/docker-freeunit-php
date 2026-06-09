@@ -20,7 +20,7 @@ docker compose up --build        # from this directory
 ```
 
 - Web: open <http://localhost:8080/>.
-- Cron: watch the scheduled task fire (about once a minute) with
+- Cron: watch the scheduled task fire (every second) with
 
   ```bash
   docker compose logs -f cron
@@ -39,11 +39,15 @@ This example adds exactly one such file,
 
 ```bash
 handle_supercronic() {
-    local crontab=/etc/supercronic/crontab
+    shift                                        # drop the command word; "$@" = operator flags
+    local crontab="${SUPERCRONIC_CRONTAB:-/etc/supercronic/crontab}"
+    local -a default_opts=()                     # baked-in defaults (array: space-safe)
     run_entrypoint_scripts                       # reuse a public core-library routine
-    log_notice "starting supercronic cron runner ($crontab)"
-    exec_as_user "$APPLICATION_USER" "$APPLICATION_GROUP" \
-        supercronic "$crontab"                   # drop root -> app user, then exec
+    local cron_user="worker"
+    setup_user "$cron_user" 1500 "$cron_user" 1500   # provision a dedicated user
+    log_notice "starting supercronic cron runner ($crontab) as $cron_user"
+    exec_as_user "$cron_user" "$cron_user" \
+        supercronic "${default_opts[@]}" "$@" "$crontab"   # drop root -> worker, then exec
 }
 ```
 
@@ -53,6 +57,16 @@ Starting the container with `command: ["supercronic"]` (see
 (`run_entrypoint_scripts`, `exec_as_user`, `log_notice`) and **execs** the cron
 runner, which then becomes the container's main process.
 
+The hook is written as a reusable template rather than a one-off. Because the
+dispatcher invokes `handle_<cmd> "$@"` with the full argv, `$1` is always the
+command word: `shift` it off and `"$@"` holds exactly the flags the operator
+appended. So `command: ["supercronic", "-debug", "-split-logs"]` (or
+`docker run IMG supercronic -debug`) forwards those flags straight to the
+runner. Defaults live in a `default_opts` array (space-safe, and operator flags
+that follow can override them), the crontab path is an env-overridable
+`SUPERCRONIC_CRONTAB`, and the positional crontab stays last where supercronic
+expects it — patterns that carry over to any companion command.
+
 The contract the hook follows (enforced by the entrypoint):
 
 - The file only **defines** `handle_*` functions — no top-level side effects (it
@@ -61,6 +75,25 @@ The contract the hook follows (enforced by the entrypoint):
   contract violation.
 - It does not shadow the core library's function names or the
   `UNIT_*` / `ENTRYPOINT_*` / `APPLICATION_*` variables.
+
+## A dedicated user for the cron role
+
+Rather than reuse the base `unit` user, the hook provisions its own `worker`
+user (uid/gid 1500) with the public `setup_user` routine and drops to it — so the
+cron jobs run under their own least-privilege identity. Two details worth noting:
+
+- **A new name is required for a custom uid.** `setup_user` keeps the existing
+  id of a user that already exists, and the base `unit` user is created by the
+  core package's postinst with a system-range UID. So passing `1500` to a
+  re-provisioned `unit` would be ignored (and logged). Using a fresh name
+  (`worker`) is what makes the custom uid take effect.
+- **The uid/gid must be free.** `setup_user` dies with an actionable message if
+  `1500` is already taken — pick another free id or pre-create the user.
+
+`worker` is created with no app directory and is not granted write access to
+anything; the demo task only reads `/www` (root-owned, world-readable) and prints
+its identity. `cron-task.php` prints `uid=…(…) gid=…(…)`, so the logs show the
+jobs running as `uid=1500(worker)`, not as `unit`.
 
 ## What it shows
 
@@ -72,11 +105,23 @@ The contract the hook follows (enforced by the entrypoint):
   uses the default command; `cron` overrides it with `supercronic`. Both run
   under the same hardening (`cap_drop: [ALL]`, `cap_add: [SETUID, SETGID]`,
   `no-new-privileges`) — even the cron role keeps `SETUID`/`SETGID` because it
-  drops to the app user itself via `setpriv` (`exec_as_user`), just as the Unit
-  master does for its workers.
+  drops to the `worker` user itself via `setpriv` (`exec_as_user`), just as the
+  Unit master does for its workers.
 - The cron role never starts Unit: the hook execs `supercronic` before the
   entrypoint reaches its first-run/`unitd` path, so `config.json` is simply
-  unused there.
+  unused there. Because nothing listens on the control socket, the cron service
+  also **disables the image `HEALTHCHECK`** (which probes that socket) — otherwise
+  the container would report unhealthy forever.
+
+## Verify
+
+```bash
+docker compose up --build -d
+curl -s http://localhost:8080/ | grep 'web role'           # web role serves
+sleep 3                                                     # the crontab fires every second
+docker compose logs cron | grep 'uid=1500(worker)'         # cron runs as worker, not unit
+docker compose down -v
+```
 
 ## Why a hook instead of a second image
 

@@ -1,0 +1,59 @@
+{
+    "listeners": {
+        "*:8080": {
+            "pass": "routes/main"
+        }
+    },
+    "routes": {
+        "main": [
+            {
+                "match": {
+                    "uri": "/admin/*"
+                },
+                "action": {
+                    "pass": "applications/admin"
+                }
+            },
+            {
+                "action": {
+                    "share": "/www/public$uri",
+                    "fallback": {
+                        "pass": "applications/site"
+                    }
+                }
+            }
+        ]
+    },
+    "applications": {
+        "site": {
+            "type": "php",
+            "root": "/www/public/",
+            "script": "index.php",
+            "user": "unit",
+            "group": "unit",
+            "options": {
+                "admin": {
+                    "memory_limit": "256M",
+                    "display_errors": "0"
+                },
+                "user": {
+                    "date.timezone": "UTC"
+                }
+            },
+            "environment": {
+                "APP_ENV": "demo",
+                "APP_GREETING": "hello from the Unit environment block"
+            }
+        },
+        "admin": {
+            "type": "php",
+            "root": "/www/admin/",
+            "script": "index.php",
+            "user": "unit",
+            "group": "unit",
+            "options": {
+                "file": "/www/admin/php.ini"
+            }
+        }
+    }
+}
