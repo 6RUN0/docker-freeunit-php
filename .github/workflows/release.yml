@@ -103,15 +103,44 @@ jobs:
       # Keyless (OIDC) provenance + SBOM attestations, pushed to GHCR as OCI
       # referrers of the image manifest. Verify with:
       #   gh attestation verify oci://$IMAGE@$DIGEST --owner <owner>
+      # Both write a Sigstore public-good Rekor transparency-log entry, which
+      # intermittently times out ("error creating tlog entry"). GitHub Actions
+      # has no native retry for `uses:` steps, so each attestation runs once with
+      # continue-on-error and is re-run by a guarded step only when the first
+      # attempt failed — riding out a transient tlog flake without failing the
+      # whole release.
       - name: attest build provenance
+        id: provenance
+        continue-on-error: true
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ env.IMAGE_DIGEST }}
           push-to-registry: true
 
+      - name: attest build provenance (retry)
+        if: steps.provenance.outcome == 'failure'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          push-to-registry: true
+
+      # actions/attest-sbom is deprecated; actions/attest is its successor and
+      # accepts the same inputs (sbom-path creates the SBOM attestation).
       - name: attest SBOM
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        id: sbom
+        continue-on-error: true
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: attest SBOM (retry)
+        if: steps.sbom.outcome == 'failure'
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ env.IMAGE_DIGEST }}
