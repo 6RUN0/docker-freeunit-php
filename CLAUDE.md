@@ -57,7 +57,9 @@ release is the unique build id), plus the floating `$(SUITE)-php$*`.
 
 1. **base_image** — `FROM debian:${SUITE}${IMAGE_SUFFIX}`; rewrites apt sources to
    mirrors, runs `apt full-upgrade`, and adds the deb.sury.org PHP repo. The sury
-   source is written in **deb822 format** (`*.sources`) and pinned at priority 1001.
+   source is written in **deb822 format** (`*.sources`) and pinned at priority 990
+   (below 1000, so a compromised sury mirror cannot force-downgrade a Debian
+   package).
 2. **php_image** — installs `libphp${PHP_VER}-embed` (the embed SAPI the FreeUnit
    module needs) plus the project's standard PHP extension set, all from sury.
 3. **php_image** also installs the fragile extensions (`imagick`,

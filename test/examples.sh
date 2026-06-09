@@ -65,7 +65,8 @@ compose() {
         -p "freeunit-ex-$example" "$@"
 }
 
-# Poll an URL until it responds (any HTTP status) or a timeout. Args: <url> [curl-opts...]
+# Poll an URL until it responds successfully (curl -fsS, so HTTP < 400) or a
+# timeout. Args: <url> [curl-opts...]
 wait_http() {
     local url=$1; shift
     local _
@@ -140,7 +141,7 @@ check_cron_hook() {
     wait_http http://localhost:8080/ || fail "cron-hook: web role did not respond on :8080"
     local web; web="$(curl -fsS http://localhost:8080/)"
     assert_contains 'web role' "$web" cron-hook
-    # The crontab uses supercronic's six-field (per-second) syntax, so a tick
+    # The crontab uses supercronic's seven-field (per-second) syntax, so a tick
     # lands within a second; wait a few, then assert the cron job ran as the
     # dedicated worker user (uid 1500), not as unit.
     log "cron-hook: waiting up to 15s for a cron tick"
