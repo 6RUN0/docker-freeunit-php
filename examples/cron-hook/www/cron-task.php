@@ -8,7 +8,7 @@
 //
 // The hook provisions a dedicated `worker` user (uid/gid 1500) via setup_user
 // and drops to it with exec_as_user, so this task runs UNPRIVILEGED and NOT as
-// `unit`. Print the effective identity to prove it -- the line reads like the
+// `freeunit`. Print the effective identity to prove it -- the line reads like the
 // `id` command: uid=1500(worker) gid=1500(worker).
 $uid = posix_geteuid();
 $gid = posix_getegid();

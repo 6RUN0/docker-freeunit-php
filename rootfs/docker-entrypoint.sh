@@ -33,13 +33,21 @@ for hook in "$ENTRYPOINT_HOOK_DIR"/*.sh; do
     fi
 done
 
+# No command was given (the image declares no CMD on purpose: an exec-form CMD
+# cannot expand the UNIT_* single source, so the default launch lives here). Run
+# the daemon in the foreground against the control socket, with the binary name
+# and socket path taken from docker-entrypoint-common.sh so nothing is duplicated.
+if [ "$#" -eq 0 ]; then
+    set -- "$UNIT_BINARY" --no-daemon --control "unix:$UNIT_CONTROL_SOCKET"
+fi
+
 # A matching handle_<cmd> owns the launch and must exec; dispatch_handler enforces
 # that (it dies loudly if a handler returns or exits non-zero without exec'ing,
 # instead of falling through to `exec "$@"` and double-running the command). It is
 # a no-op when no handler matches, so the default launch path below runs.
 dispatch_handler "$@"
 
-if [ "${1:-}" = "unitd" ] || [ "${1:-}" = "unitd-debug" ]; then
+if [ "${1:-}" = "$UNIT_BINARY" ] || [ "${1:-}" = "${UNIT_BINARY}-debug" ]; then
     unit_initial_configuration "$@"
 fi
 

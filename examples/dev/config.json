@@ -9,8 +9,8 @@
             "type": "php",
             "root": "/www/",
             "script": "index.php",
-            "user": "unit",
-            "group": "unit"
+            "user": "freeunit",
+            "group": "freeunit"
         }
     }
 }

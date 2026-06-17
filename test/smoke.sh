@@ -96,10 +96,10 @@ build_image "$REPO_ROOT"
 
 echo "==> starting $CONTAINER from $TEST_IMAGE_REF"
 # Run under the hardened posture the README documents: drop all capabilities,
-# keep only the two the root unitd master needs to drop workers to the app
+# keep only the two the root freeunitd master needs to drop workers to the app
 # user/group, and forbid privilege escalation. This doubles as a regression
 # guard -- --cap-drop=ALL strips CAP_DAC_OVERRIDE, so a non-root-owned
-# /var/lib/unit would make the master fail to create its certs/scripts stores
+# /var/lib/freeunit would make the master fail to create its certs/scripts stores
 # (the *.pem upload asserted below exercises exactly that path), which an
 # unhardened run cannot catch.
 docker run -d --name "$CONTAINER" \
@@ -167,7 +167,7 @@ if [ -n "$has_cert_fixture" ]; then
     cert_uploaded=
     for _ in $(seq 1 30); do
         if docker exec "$CONTAINER" curl -fsS -o /dev/null \
-            --unix-socket /var/run/control.unit.sock \
+            --unix-socket /var/run/control.freeunit.sock \
             "http://localhost/certificates/$CERT_NAME" 2>/dev/null; then
             cert_uploaded=1
             break
@@ -182,8 +182,8 @@ fi
 
 # Confirm the daemon and module identify themselves (build-stage check, repeated
 # at runtime so a broken module surfaces here too).
-echo "==> unitd --version"
-docker exec "$CONTAINER" unitd --version
+echo "==> freeunitd --version"
+docker exec "$CONTAINER" freeunitd --version
 echo "==> php -v"
 docker exec "$CONTAINER" php -v
 

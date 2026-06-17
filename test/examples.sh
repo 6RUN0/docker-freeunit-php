@@ -114,7 +114,7 @@ check_dev() {
     assert_contains 'wrote a timestamp' "$body" dev
     # The /data write must be owned by the unprivileged app user, not root.
     local owner; owner="$(compose dev exec -T app stat -c '%U' /data/visits.log)"
-    [ "$owner" = unit ] || fail "dev: /data/visits.log owned by '$owner', expected 'unit'"
+    [ "$owner" = freeunit ] || fail "dev: /data/visits.log owned by '$owner', expected 'freeunit'"
 }
 
 check_routing() {
@@ -143,7 +143,7 @@ check_cron_hook() {
     assert_contains 'web role' "$web" cron-hook
     # The crontab uses supercronic's seven-field (per-second) syntax, so a tick
     # lands within a second; wait a few, then assert the cron job ran as the
-    # dedicated worker user (uid 1500), not as unit.
+    # dedicated worker user (uid 1500), not as freeunit.
     log "cron-hook: waiting up to 15s for a cron tick"
     local _ logs
     for _ in $(seq 1 15); do

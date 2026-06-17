@@ -11,6 +11,6 @@ FROM ghcr.io/6run0/freeunit-php:trixie-php${PHP_VER}
 
 # Only the Unit config is baked. The app code is NOT copied -- it is bind-mounted
 # in docker-compose.yml so host edits are live. The entrypoint applies this
-# config on first start (when /var/lib/unit is empty); see the README note on why
+# config on first start (when /var/lib/freeunit is empty); see the README note on why
 # config edits, unlike code edits, need a `docker compose down -v` to re-apply.
 COPY config.json /docker-entrypoint.d/config.json

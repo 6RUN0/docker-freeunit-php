@@ -1,7 +1,7 @@
 <?php
 
 // Web role of the cron-hook example: served by the Unit master that the default
-// `unitd` command starts. Serving this at all confirms the embedded PHP module
+// `freeunitd` command starts. Serving this at all confirms the embedded PHP module
 // loaded and FreeUnit routed the request to it.
 header('Content-Type: text/plain; charset=utf-8');
 

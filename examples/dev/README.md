@@ -26,7 +26,7 @@ re-reads PHP files per request.
 
 The last row is the one that surprises people. The entrypoint applies
 `config.json` **only on first start**, when Unit's state directory
-(`/var/lib/unit`) is empty. After that the config lives in Unit's own state, so
+(`/var/lib/freeunit`) is empty. After that the config lives in Unit's own state, so
 editing the baked `config.json` does nothing until you reset that state with
 `down -v`. PHP code has no such caveat — it is re-read every request.
 

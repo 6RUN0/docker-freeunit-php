@@ -10,6 +10,31 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+### Changed
+
+- **FreeUnit rebrand (breaking for downstream images).** Upstream renamed its
+  Debian packages and on-disk identity from `unit*` to `freeunit*`, and the image
+  follows suit: the daemon is `freeunitd`/`freeunitd-debug`, the state dir
+  `/var/lib/freeunit`, the control socket `/var/run/control.freeunit.sock`, the log
+  `/var/log/freeunit.log`, and the default application user/group `freeunit` (was
+  `unit`). Downstream images must move any `config.json` `user`/`group` keys and
+  any custom launch command from `unit`/`unitd` to `freeunit`/`freeunitd`; the
+  reusable entrypoint library keeps its function names and `UNIT_*`/`APPLICATION_*`
+  variable identifiers, so hooks that only call the documented API are unaffected.
+- Bumped the bundled FreeUnit `.deb` release to `1.35.6-build2` (`1.35.6-1`) and
+  recomputed the `FREEUNIT_SHA256SUMS_SHA256` trust anchor.
+- The brand identity is single-sourced as Dockerfile `ARG`s mirroring the upstream
+  packaging vocabulary (`BRAND`, `RUNTIME`, `RUNDIR`, `BRAND_TITLE`, `HOMEPAGE`,
+  `DOCS_URL`). They default to `freeunit`/`/var/run` and the build now **asserts the
+  installed binary's compiled paths match `RUNTIME`/`RUNDIR`**, so a future upstream
+  identity change fails the build instead of shipping an image whose entrypoint
+  manages paths the daemon does not use.
+- The default launch command moved out of the Dockerfile `CMD` into the entrypoint,
+  and the `HEALTHCHECK` is now a script (`/docker-healthcheck.sh`), so the binary
+  name and control-socket path stay single-sourced from `docker-entrypoint-common.sh`
+  instead of being duplicated in an exec-form instruction that cannot expand a
+  build ARG.
+
 ## [0.0.5] - 2026-06-09
 
 ### Added

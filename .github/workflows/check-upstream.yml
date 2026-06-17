@@ -80,17 +80,19 @@ jobs:
 
           # New deb version comes from the core asset name. GitHub renames the
           # '~' to '.' in download URLs, but SHA256SUMS keeps the real '~' name:
-          #   unit_<version>~<suite>_amd64.deb
-          core=$(grep -oE "unit_[^ ]+~${suite}_amd64\.deb" "$work/SHA256SUMS" | head -n1)
-          : "${core:?no core unit_*~${suite}_amd64.deb entry in SHA256SUMS}"
-          new_version=${core#unit_}
+          #   freeunit_<version>~<suite>_amd64.deb
+          # The '_' right after the brand isolates the core from the hyphenated
+          # siblings (freeunit-dev_, freeunit-php8.3_, freeunit-dbg_, ...).
+          core=$(grep -oE "freeunit_[^ ]+~${suite}_amd64\.deb" "$work/SHA256SUMS" | head -n1)
+          : "${core:?no core freeunit_*~${suite}_amd64.deb entry in SHA256SUMS}"
+          new_version=${core#freeunit_}
           new_version=${new_version%"~${suite}_amd64.deb"}
           : "${new_version:?could not parse the deb version from $core}"
 
           # Refuse to bump to an incomplete release: every matrixed PHP line must
           # have its module .deb checksummed, or the build would fail later.
           for php in $PHP_LINES; do
-            entry="unit-php${php}_${new_version}~${suite}_amd64.deb"
+            entry="freeunit-php${php}_${new_version}~${suite}_amd64.deb"
             grep -qF "$entry" "$work/SHA256SUMS" \
               || { echo "ERROR: release $new_release has no entry for $entry" >&2; exit 1; }
           done

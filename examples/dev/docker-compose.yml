@@ -7,7 +7,7 @@
 #
 # Two things are NOT live and DO need a rebuild / recreate:
 #   * the PHP line (PHP_VER in .env) -- it is a build arg: `docker compose up --build`
-#   * config.json -- it is applied only on first start (empty /var/lib/unit), so
+#   * config.json -- it is applied only on first start (empty /var/lib/freeunit), so
 #     to re-apply an edited config run `docker compose down -v` then `up` again.
 services:
   app:

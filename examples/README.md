@@ -62,6 +62,6 @@ out on purpose (each is documented in the base [README](../README.md) /
   ships exactly one config);
 - multiple certificate bundles and the `*.pem` basename validation (`web-app`
   uploads a single bundle);
-- the `unitd-debug` launch command;
+- the `freeunitd-debug` launch command;
 - the `SUPERCRONIC_CRONTAB` env override beyond the single flag-forwarding path
   shown in `cron-hook`.

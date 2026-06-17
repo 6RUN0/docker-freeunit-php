@@ -120,7 +120,7 @@ RUN \
 # FreeUnit core daemon + php module from prebuilt .deb
 #
 # GitHub renames the '~' in asset file names to '.', so the same package
-# is published as  unit_<ver>.<suite>_amd64.deb  (download URL) while its
+# is published as  ${BRAND}_<ver>.<suite>_amd64.deb  (download URL) while its
 # real version / SHA256SUMS entry is  <ver>~<suite>. Files are saved under
 # the '~' name so `sha256sum -c` actually matches (with the '.' name the
 # entries are skipped and the check passes vacuously).
@@ -128,16 +128,33 @@ FROM php_image AS final_image
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SUITE
 ARG PHP_VER
-ARG FREEUNIT_VERSION=1.35.5-1
-ARG FREEUNIT_RELEASE=1.35.5-build4
+ARG FREEUNIT_VERSION=1.35.6-1
+ARG FREEUNIT_RELEASE=1.35.6-build2
 # SHA256 of the release's SHA256SUMS file, pinned in version control as a trust
 # anchor. The .deb integrity check below verifies each package against
 # SHA256SUMS, but that file is fetched from the same release, so a release
 # compromise could replace both the .debs and their checksums. Pinning the
 # manifest digest here breaks that self-reference: tampering no longer passes,
 # because the expected value lives in this repo. Bump it with FREEUNIT_RELEASE.
-ARG FREEUNIT_SHA256SUMS_SHA256=0db5491eca299286b6e6257305d369fe0f057be049a5a898774b0d48b6de06ab
+ARG FREEUNIT_SHA256SUMS_SHA256=32c90426ae34aa642af62a1c5ddd2142d6ba96958615c763060cb57622dfb5a6
 ARG FREEUNIT_BASE_URL="https://github.com/6RUN0/freeunit/releases/download"
+# Brand identity, mirroring the upstream freeunit packaging vocabulary
+# (freeunit/pkg/deb/Makefile): BRAND is the dpkg/apt identity (asset/package
+# names we download), RUNTIME is the on-disk identity the package compiled into
+# the binary (daemon ${RUNTIME}d, /var/lib/${RUNTIME}, control.${RUNTIME}.sock,
+# /var/log/${RUNTIME}.log, the ${RUNTIME}:${RUNTIME} user/group), and RUNDIR is
+# where the socket + pid live. We INSTALL prebuilt .debs, so these are NOT free
+# knobs: only the published identity exists. They are single-sourced here for
+# the RUN (asset names + on-disk paths) and the OCI LABELs, and the RUN asserts
+# the installed binary was compiled with exactly these paths — a future upstream
+# identity change then fails the build loudly instead of shipping an image whose
+# entrypoint manages paths the daemon does not use.
+ARG BRAND=freeunit
+ARG RUNTIME=freeunit
+ARG RUNDIR=/var/run
+ARG BRAND_TITLE=FreeUnit
+ARG HOMEPAGE=https://freeunit.org
+ARG DOCS_URL=https://docs.freeunit.org
 # DL3003: the work dir is created at build time with `mktemp -d`, so its path is
 # dynamic and cannot be expressed with WORKDIR — `cd` into it is intentional.
 # hadolint ignore=DL3003
@@ -158,22 +175,22 @@ RUN \
     # of pipes (hadolint DL4006) — `sha256sum FILE` prints "<hash>  FILE".
     [ "$(sha256sum SHA256SUMS)" = "${FREEUNIT_SHA256SUMS_SHA256}  SHA256SUMS" ] \
     || { echo "ERROR: SHA256SUMS digest does not match the pinned FREEUNIT_SHA256SUMS_SHA256"; exit 1; }; \
-    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "unit_${deb_ver}_amd64.deb" "${url}/unit_${asset_ver}_amd64.deb"; \
-    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "unit-php${php_ver}_${deb_ver}_amd64.deb" "${url}/unit-php${php_ver}_${asset_ver}_amd64.deb"; \
+    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "${BRAND}_${deb_ver}_amd64.deb" "${url}/${BRAND}_${asset_ver}_amd64.deb"; \
+    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" "${url}/${BRAND}-php${php_ver}_${asset_ver}_amd64.deb"; \
     sha256sum -c --ignore-missing SHA256SUMS; \
     # --ignore-missing passes vacuously if an expected name is absent from
     # SHA256SUMS (e.g. upstream asset rename), so assert both entries exist —
     # otherwise an unverified .deb would be installed silently.
-    grep -qF "unit_${deb_ver}_amd64.deb" SHA256SUMS \
-    || { echo "ERROR: no SHA256SUMS entry for unit_${deb_ver}_amd64.deb"; exit 1; }; \
-    grep -qF "unit-php${php_ver}_${deb_ver}_amd64.deb" SHA256SUMS \
-    || { echo "ERROR: no SHA256SUMS entry for unit-php${php_ver}_${deb_ver}_amd64.deb"; exit 1; }; \
+    grep -qF "${BRAND}_${deb_ver}_amd64.deb" SHA256SUMS \
+    || { echo "ERROR: no SHA256SUMS entry for ${BRAND}_${deb_ver}_amd64.deb"; exit 1; }; \
+    grep -qF "${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" SHA256SUMS \
+    || { echo "ERROR: no SHA256SUMS entry for ${BRAND}-php${php_ver}_${deb_ver}_amd64.deb"; exit 1; }; \
     apt-get update; \
     # apt resolves libphp${php_ver}-embed (already present) and the virtual
-    # unit-rX.Y.Z provided by the core unit package from the two local files
+    # ${RUNTIME}-rX.Y.Z provided by the core ${BRAND} package from the two local files
     apt-get install -y --no-install-recommends \
-    "./unit_${deb_ver}_amd64.deb" \
-    "./unit-php${php_ver}_${deb_ver}_amd64.deb" \
+    "./${BRAND}_${deb_ver}_amd64.deb" \
+    "./${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" \
     ; \
     cd /; \
     rm -rf "$work"; \
@@ -186,37 +203,61 @@ RUN \
     /var/log/apt* \
     /var/log/dpkg.log \
     ; \
-    # the unit package postinst creates the unit:unit system user/group
-    # State directory: kept root-owned so the root unitd master can create its
+    # the ${BRAND} package postinst creates the ${RUNTIME}:${RUNTIME} system user/group
+    # State directory: kept root-owned so the root ${RUNTIME}d master can create its
     # certs/ and scripts/ stores even under --cap-drop=ALL, which strips
-    # CAP_DAC_OVERRIDE (a unit-owned statedir would make those mkdirs fail with
-    # EACCES, breaking startup). The per-app worker drops to 'unit' via the Unit
+    # CAP_DAC_OVERRIDE (a ${RUNTIME}-owned statedir would make those mkdirs fail with
+    # EACCES, breaking startup). The per-app worker drops to '${RUNTIME}' via the Unit
     # config's user/group keys, not via statedir ownership.
-    rm -rf /var/lib/unit; \
-    mkdir -p /var/lib/unit; \
+    rm -rf "/var/lib/${RUNTIME}"; \
+    mkdir -p "/var/lib/${RUNTIME}"; \
     # preparing init dir
     mkdir -p /docker-entrypoint.d; \
     # entrypoint extension dir: child images drop *.sh handlers here (see
     # rootfs/docker-entrypoint.sh); kept separate from the runtime-config dir above
     mkdir -p /docker-entrypoint-hook.d; \
     # log to stdout
-    ln -sf /dev/stdout /var/log/unit.log; \
-    unitd --version; \
+    ln -sf /dev/stdout "/var/log/${RUNTIME}.log"; \
+    # Assert the prebuilt binary's compiled identity matches RUNTIME/RUNDIR. We
+    # only INSTALL .debs, so the statedir/log paths created above and the socket/
+    # pid the entrypoint+healthcheck use are correct ONLY if the daemon was
+    # compiled with the same. `--version` prints the configure line; a mismatch
+    # means upstream changed its on-disk identity — fail now, not at runtime.
+    ver="$("${RUNTIME}d" --version 2>&1)"; \
+    echo "$ver"; \
+    for expect in \
+    "--statedir=/var/lib/${RUNTIME}" \
+    "--control=unix:${RUNDIR}/control.${RUNTIME}.sock" \
+    "--pid=${RUNDIR}/${RUNTIME}.pid" \
+    "--log=/var/log/${RUNTIME}.log" \
+    "--user=${RUNTIME}" \
+    "--group=${RUNTIME}"; do \
+    case "$ver" in \
+    *"$expect"*) ;; \
+    *) echo "ERROR: ${RUNTIME}d was not compiled with '$expect' (upstream on-disk identity changed? update BRAND/RUNTIME/RUNDIR)"; exit 1 ;; \
+    esac; \
+    done; \
     php -v;
 WORKDIR /
 # rootfs/ mirrors the container filesystem (entrypoint scripts, configs, ...)
 COPY rootfs/ /
-LABEL org.opencontainers.image.title="freeunit-php" \
-      org.opencontainers.image.description="FreeUnit (NGINX Unit fork) with an embedded PHP ${PHP_VER} module on Debian ${SUITE}" \
+LABEL org.opencontainers.image.title="${BRAND}-php" \
+      org.opencontainers.image.description="${BRAND_TITLE} (NGINX Unit fork) with an embedded PHP ${PHP_VER} module on Debian ${SUITE}" \
       org.opencontainers.image.source="https://github.com/6RUN0/docker-freeunit-php" \
-      org.opencontainers.image.url="https://github.com/6RUN0/docker-freeunit-php" \
+      org.opencontainers.image.url="${HOMEPAGE}" \
+      org.opencontainers.image.documentation="${DOCS_URL}" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
       org.opencontainers.image.version="${FREEUNIT_VERSION}"
 # Liveness via the Unit control socket: app listener ports are configured at
 # runtime (so no fixed port to probe), but a responsive control API proves the
-# daemon and the embedded PHP module are up. Runs as root (image default), which
-# owns the 0600 socket, so it works even under --cap-drop=ALL.
+# daemon and the embedded PHP module are up. The probe is a script so the socket
+# path stays single-sourced from docker-entrypoint-common.sh (UNIT_CONTROL_SOCKET)
+# rather than duplicated here — an exec-form CMD cannot expand a build ARG/ENV.
+# Runs as root (image default), which owns the 0600 socket, so it works even
+# under --cap-drop=ALL.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS -o /dev/null --unix-socket /var/run/control.unit.sock http://localhost/ || exit 1
+    CMD ["/docker-healthcheck.sh"]
+# No CMD: docker-entrypoint.sh supplies the default launch (${RUNTIME}d against
+# the control socket) from the same UNIT_* single source, so the binary name and
+# socket path are not duplicated in an exec-form CMD that cannot take a build ARG.
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/control.unit.sock"]

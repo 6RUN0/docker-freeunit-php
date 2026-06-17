@@ -86,7 +86,7 @@ docker run -d --name app \
   freeunit-php
 ```
 
-On first start (when `/var/lib/unit` is empty) the entrypoint launches the
+On first start (when `/var/lib/freeunit` is empty) the entrypoint launches the
 daemon against the control socket, applies everything in `/docker-entrypoint.d/`,
 then restarts the daemon in the foreground. If that initial configuration fails,
 the state directory is wiped so the next start retries cleanly.
@@ -123,9 +123,9 @@ These are the image's runtime API; they are read by the entrypoint.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `APPLICATION_USER`  | `unit` | App user. If it already exists, its UID is kept. |
+| `APPLICATION_USER`  | `freeunit` | App user. If it already exists, its UID is kept. |
 | `APPLICATION_UID`   | `1000` | UID used only when the user is created. |
-| `APPLICATION_GROUP` | `unit` | App group. If it already exists, its GID is kept. |
+| `APPLICATION_GROUP` | `freeunit` | App group. If it already exists, its GID is kept. |
 | `APPLICATION_GID`   | `1000` | GID used only when the group is created. |
 | `APPLICATION_DIR`   | _unset_ | App home dir; created if missing. |
 | `APPLICATION_CHOWN` | `yes`  | When `yes`, `chown` `APPLICATION_DIR` to the app user. |

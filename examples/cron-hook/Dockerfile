@@ -2,7 +2,7 @@
 # runner -- added entirely through the entrypoint hook system. The same image
 # then serves two roles, chosen per container by the command:
 #
-#   * default command `unitd`   -> the Unit web server (base image behavior)
+#   * default command `freeunitd`   -> the Unit web server (base image behavior)
 #   * command `supercronic`     -> the cron runner (the hook in this example)
 #
 # No second Dockerfile, no overriding /docker-entrypoint.sh. See

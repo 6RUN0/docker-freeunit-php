@@ -4,7 +4,7 @@ This example shows **why the entrypoint hook system exists**. A single image
 built on the `freeunit-php` base runs in two roles, chosen per container by the
 command:
 
-- **web** — the default `unitd` command: the Unit web server serving a PHP app.
+- **web** — the default `freeunitd` command: the Unit web server serving a PHP app.
 - **cron** — the `supercronic` command: a long-lived cron runner executing a PHP
   task on a schedule.
 
@@ -29,7 +29,7 @@ docker compose up --build        # from this directory
 ## How the hook works
 
 The base image ships a thin dispatcher (`/docker-entrypoint.sh`) that, before
-its default `unitd` path, sources every `*.sh` in `/docker-entrypoint-hook.d/`
+its default `freeunitd` path, sources every `*.sh` in `/docker-entrypoint-hook.d/`
 and looks for a shell function `handle_<command>` matching the container's
 command. If one exists, that function owns the launch.
 
@@ -78,14 +78,14 @@ The contract the hook follows (enforced by the entrypoint):
 
 ## A dedicated user for the cron role
 
-Rather than reuse the base `unit` user, the hook provisions its own `worker`
+Rather than reuse the base `freeunit` user, the hook provisions its own `worker`
 user (uid/gid 1500) with the public `setup_user` routine and drops to it — so the
 cron jobs run under their own least-privilege identity. Two details worth noting:
 
 - **A new name is required for a custom uid.** `setup_user` keeps the existing
-  id of a user that already exists, and the base `unit` user is created by the
+  id of a user that already exists, and the base `freeunit` user is created by the
   core package's postinst with a system-range UID. So passing `1500` to a
-  re-provisioned `unit` would be ignored (and logged). Using a fresh name
+  re-provisioned `freeunit` would be ignored (and logged). Using a fresh name
   (`worker`) is what makes the custom uid take effect.
 - **The uid/gid must be free.** `setup_user` dies with an actionable message if
   `1500` is already taken — pick another free id or pre-create the user.
@@ -93,7 +93,7 @@ cron jobs run under their own least-privilege identity. Two details worth noting
 `worker` is created with no app directory and is not granted write access to
 anything; the demo task only reads `/www` (root-owned, world-readable) and prints
 its identity. `cron-task.php` prints `uid=…(…) gid=…(…)`, so the logs show the
-jobs running as `uid=1500(worker)`, not as `unit`.
+jobs running as `uid=1500(worker)`, not as `freeunit`.
 
 ## What it shows
 
@@ -108,7 +108,7 @@ jobs running as `uid=1500(worker)`, not as `unit`.
   drops to the `worker` user itself via `setpriv` (`exec_as_user`), just as the
   Unit master does for its workers.
 - The cron role never starts Unit: the hook execs `supercronic` before the
-  entrypoint reaches its first-run/`unitd` path, so `config.json` is simply
+  entrypoint reaches its first-run/`freeunitd` path, so `config.json` is simply
   unused there. Because nothing listens on the control socket, the cron service
   also **disables the image `HEALTHCHECK`** (which probes that socket) — otherwise
   the container would report unhealthy forever.
@@ -119,7 +119,7 @@ jobs running as `uid=1500(worker)`, not as `unit`.
 docker compose up --build -d
 curl -s http://localhost:8080/ | grep 'web role'           # web role serves
 sleep 3                                                     # the crontab fires every second
-docker compose logs cron | grep 'uid=1500(worker)'         # cron runs as worker, not unit
+docker compose logs cron | grep 'uid=1500(worker)'         # cron runs as worker, not freeunit
 docker compose down -v
 ```
 

@@ -243,12 +243,12 @@ test_setup_user_rejects_non_numeric_id() {
     assert_contains "$err" "must be numeric" "the die message explains the numeric requirement"
 }
 
-# setup_user must be idempotent for an existing user/group ('unit' exists from the
-# package postinst and the library load): keep its ids, log, and succeed.
+# setup_user must be idempotent for an existing user/group ('freeunit' exists from
+# the package postinst and the library load): keep its ids, log, and succeed.
 test_setup_user_existing_is_idempotent() {
     _load_lib
     local out ec
-    out=$(setup_user unit 4242 unit 4242 2>&1 3>&1)
+    out=$(setup_user freeunit 4242 freeunit 4242 2>&1 3>&1)
     ec=$?
     assert_eq "$ec" 0 "provisioning an existing user/group must succeed (idempotent)"
     assert_contains "$out" "already exists" "it logs that the existing id is kept"

@@ -49,11 +49,11 @@ handle_supercronic() {
     # Unit-less launch path. log_notice/log_info likewise come from the library.
     run_entrypoint_scripts
 
-    # Provision a DEDICATED user for the cron role instead of reusing `unit`, to
+    # Provision a DEDICATED user for the cron role instead of reusing `freeunit`, to
     # show programmatic user provisioning from a hook and least privilege (cron
     # jobs run under their own identity). setup_user is a public core-library
     # routine and is idempotent, so calling it on every start is safe. We use a
-    # NEW name `worker`: APPLICATION_UID is ignored for the pre-existing `unit`
+    # NEW name `worker`: APPLICATION_UID is ignored for the pre-existing `freeunit`
     # user (the core package's postinst already created it with a system UID), so
     # a custom uid is only honored for a user we create here. The uid/gid 1500
     # must be free -- setup_user dies actionably if it is taken.

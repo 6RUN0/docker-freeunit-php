@@ -32,6 +32,6 @@ docker run --rm -p 8080:8080 \
 - Hardening — `cap_drop: [ALL]` then `cap_add: [SETUID, SETGID]` plus
   `no-new-privileges`: the Unit master starts as root and needs only those two
   capabilities to drop each worker to the app user/group.
-- `config.json` sets the application's `user` / `group` to `unit`, so the PHP
+- `config.json` sets the application's `user` / `group` to `freeunit`, so the PHP
   worker itself runs unprivileged (the recommended way to drop privileges — not
   by changing the container user).

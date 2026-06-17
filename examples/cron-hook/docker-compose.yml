@@ -8,7 +8,7 @@
 #
 # Both services run the SAME image. The only difference is the command, which the
 # base entrypoint turns into a different launch mode: `web` uses the image's
-# default (unitd, the Unit web server); `cron` passes `supercronic`, which the
+# default (freeunitd, the Unit web server); `cron` passes `supercronic`, which the
 # handle_supercronic hook execs instead. That is why the hook system exists --
 # add a long-lived companion service without a second image or a forked
 # entrypoint, and every base-entrypoint fix reaches both roles.
@@ -35,7 +35,7 @@ services:
     image: freeunit-php-cron-example
     depends_on:
       - web
-    # Replace the default `unitd` command: the entrypoint dispatches this to the
+    # Replace the default `freeunitd` command: the entrypoint dispatches this to the
     # handle_supercronic hook, which execs the cron runner instead of Unit. No
     # ports and no Unit config are needed -- this container never starts Unit.
     command: ["supercronic"]

@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 
-# Filesystem layout, single-sourced for both this file and docker-entrypoint.sh.
-# The Unit paths mirror FreeUnit's compile-time configuration (--statedir /
-# --control / --pid) and the entrypoint dirs are created by the image's
-# final_image RUN, so these are fixed constants, not tunables — hence readonly.
-# They are also the defaults for the core functions below; every function still
-# takes the path as an argument so a child hook can target a different one.
+# Filesystem layout, single-sourced for this file, docker-entrypoint.sh and the
+# healthcheck. UNIT_RUNTIME/UNIT_RUNDIR mirror the on-disk identity the installed
+# freeunit package was compiled with (binary ${UNIT_RUNTIME}d, /var/lib/<rt>,
+# control.<rt>.sock, <rt>.pid, /var/log/<rt>.log — the Dockerfile asserts the
+# binary matches at build time); everything below derives from them, so a rebrand
+# is a one-line edit here mirrored by the Dockerfile's RUNTIME/RUNDIR ARGs.
+# Kept as readonly LITERALS — deliberately NOT env-derived — so the state-dir
+# wipe target and the control paths cannot be redirected by untrusted runtime
+# env. They are also the defaults for the core functions below; every function
+# still takes the path as an argument so a child hook can target a different one.
 # ENTRYPOINT_HOOK_DIR in particular must not be env-overridable: the dispatcher
 # sources files from it as root before any privilege drop.
-readonly UNIT_STATE_DIR=/var/lib/unit
-readonly UNIT_CONTROL_SOCKET=/var/run/control.unit.sock
-readonly UNIT_PID_FILE=/var/run/unit.pid
+readonly UNIT_RUNTIME=freeunit
+readonly UNIT_RUNDIR=/var/run
+# shellcheck disable=SC2034  # consumed by docker-entrypoint.sh (default launch + dispatch) and the healthcheck
+readonly UNIT_BINARY=${UNIT_RUNTIME}d
+readonly UNIT_STATE_DIR=/var/lib/${UNIT_RUNTIME}
+readonly UNIT_CONTROL_SOCKET=${UNIT_RUNDIR}/control.${UNIT_RUNTIME}.sock
+readonly UNIT_PID_FILE=${UNIT_RUNDIR}/${UNIT_RUNTIME}.pid
 readonly ENTRYPOINT_CONFIG_DIR=/docker-entrypoint.d
 # shellcheck disable=SC2034  # consumed by the dispatcher loop in docker-entrypoint.sh
 readonly ENTRYPOINT_HOOK_DIR=/docker-entrypoint-hook.d
 
 # Upper bounds (in 0.1s ticks) for the daemon-readiness and shutdown waits below.
-# A unitd that forks then dies before binding the control socket (bad config,
+# A freeunitd that forks then dies before binding the control socket (bad config,
 # OOM, exec failure), or one that ignores TERM, would otherwise spin these loops
 # forever and wedge the container invisibly to restart policies / healthchecks.
 # Bounding them turns a silent hang into an observable crash (readiness) or a
@@ -112,18 +120,18 @@ is_first_run() {
 
 # --- Unit daemon lifecycle ------------------------------------------------
 
-# Launch unitd against the control socket. --pid is explicit so stop_unit kills
-# the path unitd actually writes, independent of FreeUnit's compile-time default.
-# Args: <binary> (unitd|unitd-debug) [control_socket] [pidfile]
+# Launch freeunitd against the control socket. --pid is explicit so stop_unit kills
+# the path freeunitd actually writes, independent of FreeUnit's compile-time default.
+# Args: <binary> (freeunitd|freeunitd-debug) [control_socket] [pidfile]
 start_unit() {
     local binary=$1 socket=${2:-$UNIT_CONTROL_SOCKET} pidfile=${3:-$UNIT_PID_FILE}
     /usr/sbin/"$binary" --control "unix:$socket" --pid "$pidfile"
 }
 
 # Block until the control API actually answers. The socket file appearing does
-# not mean unitd accepts requests yet; a bare curl would abort under `set -e`
+# not mean freeunitd accepts requests yet; a bare curl would abort under `set -e`
 # on a connection-refused blip, so the loop tolerates transient failures. Bounded
-# by UNIT_READY_TIMEOUT_TICKS: if unitd forked but never opened the socket, die so
+# by UNIT_READY_TIMEOUT_TICKS: if freeunitd forked but never opened the socket, die so
 # the caller's EXIT trap fires (wipe + retry) instead of hanging forever.
 # Args: [control_socket] (default UNIT_CONTROL_SOCKET)
 wait_for_control_socket() {
@@ -157,7 +165,7 @@ read_pid() {
     esac
 }
 
-# Gracefully stop unitd (TERM via the pidfile) and wait for it to actually exit.
+# Gracefully stop freeunitd (TERM via the pidfile) and wait for it to actually exit.
 # A missing/empty/malformed pidfile signals nothing (see read_pid). Bounded by
 # UNIT_STOP_TIMEOUT_TICKS: a daemon that ignores TERM is escalated to SIGKILL
 # rather than blocking the caller forever. Args: [pidfile] [control_socket]
@@ -169,7 +177,7 @@ stop_unit() {
     # Wait for the master process to exit, not merely for the control socket to
     # vanish: Unit can unlink the socket part-way through shutdown while the
     # master is still flushing the state dir, and the happy-path caller restarts
-    # unitd immediately after, racing a half-written state. With a pid, gate on
+    # freeunitd immediately after, racing a half-written state. With a pid, gate on
     # the process; with no pidfile to read, fall back to the socket disappearing.
     while { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } \
         || { [ -z "$pid" ] && [ -S "$socket" ]; }; do
@@ -186,7 +194,7 @@ stop_unit() {
 
 # --- /docker-entrypoint.d appliers ----------------------------------------
 # Each iterates DIR (default ENTRYPOINT_CONFIG_DIR) lexically and recursively.
-# run_entrypoint_scripts is safe without a running unitd; apply_certificates and
+# run_entrypoint_scripts is safe without a running freeunitd; apply_certificates and
 # apply_config PUT over the control socket, so they need a ready daemon.
 # Each re-sets nullglob/globstar locally (the dispatcher already sets them
 # globally) so a child hook can call any applier standalone; do not "clean up"
@@ -306,8 +314,8 @@ dispatch_handler() {
 
 # Idempotently provision a group + user, and optionally a home/app dir. A child
 # image's hook can call this to create a different application user. An existing
-# group/user keeps its own GID/UID (the core unit package's postinst already
-# created 'unit' with a system-range UID), so a requested id is ignored then —
+# group/user keeps its own GID/UID (the core freeunit package's postinst already
+# created 'freeunit' with a system-range UID), so a requested id is ignored then —
 # logged, not failed.
 #
 # DIR must be a container-owned path: with chown=yes its ownership is rewritten,
@@ -372,8 +380,8 @@ unit_config_failed() {
     [ "$exit_code" -eq 0 ] && return 0
     log_notice "initial configuration failed (exit $exit_code); wiping $UNIT_STATE_DIR so it is retried on next start"
     # TERM, then a bounded wait for the process to actually exit before the wipe,
-    # so `find -delete` does not race a unitd still writing to the state dir. The
-    # wait is on the pid (not the control socket): on the failure path unitd may be
+    # so `find -delete` does not race a freeunitd still writing to the state dir. The
+    # wait is on the pid (not the control socket): on the failure path freeunitd may be
     # wedged, and blocking on a socket that never disappears would hang the EXIT
     # trap. Bounded by UNIT_STOP_TIMEOUT_TICKS, then SIGKILL, so the trap always
     # makes progress.
@@ -410,11 +418,11 @@ unit_config_failed() {
 
 # The full first-run routine, composed from the core functions above so a child
 # launch mode can call it or reuse the pieces: on a fresh container with config
-# present, launch unitd, apply *.sh/*.pem/*.json, then stop it so the real start
+# present, launch freeunitd, apply *.sh/*.pem/*.json, then stop it so the real start
 # boots a populated state. It (and its EXIT trap unit_config_failed) work on the
 # default UNIT_* paths only; a child that needs different state/socket/pid paths
 # should compose the pieces directly rather than call this. Args: <binary> (the
-# unitd binary name).
+# freeunitd binary name).
 unit_initial_configuration() {
     local binary=$1
 
@@ -458,13 +466,19 @@ unit_initial_configuration() {
 }
 
 # --- Default application user (base image behavior) -----------------------
-# Provision the default 'unit' app user from the APPLICATION_* env. A child hook
-# can call setup_user again with other arguments for a different user.
-APPLICATION_USER=${APPLICATION_USER:="unit"}
-APPLICATION_UID=${APPLICATION_UID:="1000"}
-APPLICATION_GROUP=${APPLICATION_GROUP:="unit"}
-APPLICATION_GID=${APPLICATION_GID:="1000"}
-APPLICATION_CHOWN=${APPLICATION_CHOWN:="yes"}
+# Provision the default 'freeunit' app user from the APPLICATION_* env (it maps
+# to the system freeunit:freeunit the package's postinst already created, so the
+# requested 1000 is ignored when that user exists). A child hook can call
+# setup_user again with other arguments for a different user. Guarded so a
+# consumer that sources this lib only for the constants/functions (the
+# healthcheck) skips the side effect with UNIT_LIB_NO_PROVISION=1.
+if [ -z "${UNIT_LIB_NO_PROVISION:-}" ]; then
+    APPLICATION_USER=${APPLICATION_USER:="freeunit"}
+    APPLICATION_UID=${APPLICATION_UID:="1000"}
+    APPLICATION_GROUP=${APPLICATION_GROUP:="freeunit"}
+    APPLICATION_GID=${APPLICATION_GID:="1000"}
+    APPLICATION_CHOWN=${APPLICATION_CHOWN:="yes"}
 
-setup_user "$APPLICATION_USER" "$APPLICATION_UID" "$APPLICATION_GROUP" "$APPLICATION_GID" \
-    "${APPLICATION_DIR:-}" "$APPLICATION_CHOWN"
+    setup_user "$APPLICATION_USER" "$APPLICATION_UID" "$APPLICATION_GROUP" "$APPLICATION_GID" \
+        "${APPLICATION_DIR:-}" "$APPLICATION_CHOWN"
+fi
