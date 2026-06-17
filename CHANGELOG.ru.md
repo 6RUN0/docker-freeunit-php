@@ -10,6 +10,8 @@
 
 ## [Не выпущено]
 
+## [0.0.6] - 2026-06-17
+
 ### Изменено
 
 - **Ребрендинг FreeUnit (ломающее изменение для дочерних образов).** Апстрим
@@ -258,7 +260,8 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3

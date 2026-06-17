@@ -10,6 +10,8 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-06-17
+
 ### Changed
 
 - **FreeUnit rebrand (breaking for downstream images).** Upstream renamed its
@@ -248,7 +250,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.2...v0.0.3
