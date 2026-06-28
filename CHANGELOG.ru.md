@@ -10,6 +10,15 @@
 
 ## [Не выпущено]
 
+## [0.0.7] - 2026-06-28
+
+### Изменено
+
+- Версия встроенного релиза FreeUnit `.deb` поднята до `1.35.6-build3`, пересчитан
+  trust-anchor `FREEUNIT_SHA256SUMS_SHA256`. Апстрим перевыпустил тот же пакет
+  `1.35.6-1` под новым тегом релиза, поэтому версии FreeUnit и PHP не изменились —
+  это пересборочное обновление.
+
 ## [0.0.6] - 2026-06-17
 
 ### Изменено
@@ -260,7 +269,8 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.3...v0.0.4
