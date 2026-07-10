@@ -1,0 +1,113 @@
+# .trivyignore - accepted HIGH/CRITICAL findings for freeunit-php
+#
+# Every entry below is a vulnerability that, at the scan date, has NO upstream
+# fix available (Debian status "affected" or "fix_deferred", empty FixedVersion)
+# and lives in the Debian trixie base image or the sury PHP / image-codec stack.
+# None are in FreeUnit's own .deb packages, and none are resolvable by the
+# `apt full-upgrade` the base_image stage already runs - there is nothing to
+# upgrade to. They are acknowledged and suppressed so the scan surfaces only
+# NEW, actionable (fixed) issues instead of this permanent unfixable backlog.
+#
+# Trivy reads this file automatically (default ./.trivyignore), so both
+# `make scan` and the CI trivy step honour it with no extra flags.
+#
+# Durable alternative: run trivy with `--ignore-unfixed`. That auto-suppresses
+# the whole unfixed class (which is 100% of the list below) and never goes
+# stale, at the cost of an explicit per-CVE audit trail. This file is the
+# explicit-list option; pick one, don't run both.
+#
+# Scanned image: freeunit-php:trixie-1.35.6-build4-php8.4
+# Generated:     2026-07-10
+# REVIEW BY:     2026-10-10 - re-scan and drop any CVE that upstream has since
+#                fixed (a fixed CVE left here would silence a real regression).
+#                New base-image CVEs are NOT covered until added here.
+
+# --- Image codecs (pulled by the PHP `imagick` extension) ---
+# Exploitable only when the app decodes UNTRUSTED images. Dropping the imagick
+# extension from php_image would remove this entire cluster at the source.
+
+# libraw23t64 - RAW decoder (5 findings, 3 CRITICAL)
+CVE-2026-20884
+CVE-2026-20889
+CVE-2026-21413
+CVE-2026-24450
+CVE-2026-24660
+
+# libheif1 / libheif-plugin-dav1d / libheif-plugin-libde265 - HEIF/AVIF (5)
+CVE-2025-68431
+CVE-2026-32740
+CVE-2026-32741
+CVE-2026-32882
+CVE-2026-41071
+
+# libde265-0 - H.265 decoder (4)
+CVE-2026-33164
+CVE-2026-49295
+CVE-2026-49337
+CVE-2026-49346
+
+# libaom3 - AV1 codec (4)
+CVE-2026-56208
+CVE-2026-56209
+CVE-2026-56210
+CVE-2026-56211
+
+# libtiff6 - TIFF decoder (1)
+CVE-2026-12912
+
+# imagemagick (imagemagick-7-common / libmagickcore / libmagickwand) - fix_deferred (2)
+CVE-2026-56362
+CVE-2026-56374
+
+# --- Debian base image ---
+
+# libglib2.0-0t64 - GLib, transitive dependency (7 findings, 1 CRITICAL)
+CVE-2026-58010
+CVE-2026-58011
+CVE-2026-58012
+CVE-2026-58013
+CVE-2026-58014
+CVE-2026-58015
+CVE-2026-58016
+
+# curl / libcurl4t64 - relevant only for outbound requests to hostile URLs (10)
+CVE-2026-12064
+CVE-2026-5773
+CVE-2026-6276
+CVE-2026-8286
+CVE-2026-8927
+CVE-2026-8932
+CVE-2026-9079
+CVE-2026-9080
+CVE-2026-9545
+CVE-2026-9547
+
+# libexpat1 - XML parser, relevant only for untrusted XML (6)
+CVE-2025-59375
+CVE-2026-25210
+CVE-2026-45186
+CVE-2026-56131
+CVE-2026-56407
+CVE-2026-56408
+
+# perl-base - CVE-2026-8376 is 32-bit-only (image is amd64/64-bit); the
+# archive-tar / IO-Compress issues need running perl on untrusted input (5, 2 CRITICAL)
+CVE-2026-42496
+CVE-2026-42497
+CVE-2026-48962
+CVE-2026-8376
+CVE-2026-9538
+
+# util-linux family - CVE-2026-53615 (integer overflow in libblkid DOS
+# partition parsing); local, not reachable in this container. Same ID spans
+# bsdutils/libblkid1/liblastlog2-2/libmount1/libsmartcols1/libuuid1/login/mount/util-linux.
+CVE-2026-53615
+
+# ncurses (libncursesw6/libtinfo6/ncurses-base/ncurses-bin) - CVE-2025-69720
+CVE-2025-69720
+
+# gzip - LZH decompressor buffer overflow, needs a crafted archive (1)
+CVE-2026-41992
+
+# libacl1 - symlink traversal via libacl (1)
+CVE-2026-54369
