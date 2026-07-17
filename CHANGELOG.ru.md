@@ -10,6 +10,15 @@
 
 ## [Не выпущено]
 
+## [0.1.0] - 2026-07-17
+
+### Изменено
+
+- Встроенный FreeUnit поднят до `1.36.0-build1` (`1.36.0-1`, ранее `1.35.6-1`),
+  пересчитан trust-anchor `FREEUNIT_SHA256SUMS_SHA256`. В отличие от последних
+  обновлений, это реальная смена версии апстрима — встроенный FreeUnit переходит
+  с 1.35.6 на 1.36.0, а не пересборка того же пакета.
+
 ## [0.0.9] - 2026-07-16
 
 ### Изменено
@@ -295,7 +304,8 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...v0.0.7

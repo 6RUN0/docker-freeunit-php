@@ -29,9 +29,9 @@ you need:
 | Tag pattern | Example | Resolves to |
 |-------------|---------|-------------|
 | `latest` | `ghcr.io/6run0/freeunit-php` | newest release, default PHP (8.4) |
-| `<version>` | `:0.0.9` | that repo release, default PHP |
+| `<version>` | `:0.1.0` | that repo release, default PHP |
 | `<suite>-php<X.Y>` | `:trixie-php8.3` | newest release on a PHP line (moves forward) |
-| `<version>-php<X.Y>` | `:0.0.9-php8.3` | a repo release on a PHP line |
+| `<version>-php<X.Y>` | `:0.1.0-php8.3` | a repo release on a PHP line |
 | `<suite>-<freeunit-release>-php<X.Y>` | `:trixie-1.35.5-build4-php8.5` | a specific FreeUnit build on a PHP line |
 
 ```bash

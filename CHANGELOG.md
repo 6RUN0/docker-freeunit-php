@@ -10,6 +10,15 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-17
+
+### Changed
+
+- Bumped the bundled FreeUnit to `1.36.0-build1` (`1.36.0-1`, up from `1.35.6-1`)
+  and recomputed the `FREEUNIT_SHA256SUMS_SHA256` trust anchor. Unlike the last
+  few refreshes, this is a real upstream version bump — the bundled FreeUnit
+  moves from 1.35.6 to 1.36.0, not a rebuild of the same package.
+
 ## [0.0.9] - 2026-07-16
 
 ### Changed
@@ -285,7 +294,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.6...v0.0.7
