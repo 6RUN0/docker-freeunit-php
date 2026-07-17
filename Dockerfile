@@ -128,15 +128,15 @@ FROM php_image AS final_image
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SUITE
 ARG PHP_VER
-ARG FREEUNIT_VERSION=1.35.6-1
-ARG FREEUNIT_RELEASE=1.35.6-build5
+ARG FREEUNIT_VERSION=1.36.0-1
+ARG FREEUNIT_RELEASE=1.36.0-build1
 # SHA256 of the release's SHA256SUMS file, pinned in version control as a trust
 # anchor. The .deb integrity check below verifies each package against
 # SHA256SUMS, but that file is fetched from the same release, so a release
 # compromise could replace both the .debs and their checksums. Pinning the
 # manifest digest here breaks that self-reference: tampering no longer passes,
 # because the expected value lives in this repo. Bump it with FREEUNIT_RELEASE.
-ARG FREEUNIT_SHA256SUMS_SHA256=f1f5b74c6c0a64d5f3ec00ff0f1ecf55dc0786f20858ae9fb918370a359ab877
+ARG FREEUNIT_SHA256SUMS_SHA256=a07661876083f556772474ec9da486f8bbe6a43d3fbcc583686e2a17518a0f53
 ARG FREEUNIT_BASE_URL="https://github.com/6RUN0/freeunit/releases/download"
 # Brand identity, mirroring the upstream freeunit packaging vocabulary
 # (freeunit/pkg/deb/Makefile): BRAND is the dpkg/apt identity (asset/package
