@@ -80,7 +80,7 @@ jobs:
           "shellcheck-${SHELLCHECK_VERSION}/shellcheck" rootfs/*.sh test/*.sh
 
       - name: typos
-        uses: crate-ci/typos@4d9c206a77c041268485162b8e2579ad7a5cb9a3 # v1.50.0
+        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
 
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
@@ -116,7 +116,7 @@ jobs:
           persist-credentials: false
 
       - name: set up buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Builds php<ver> and runs the end-to-end smoke test against it. The
       # Makefile forwards DOCKER_BUILD_EXTRA to `docker build`, so wire buildx's
@@ -151,7 +151,7 @@ jobs:
 
       - name: upload trivy SARIF
         if: matrix.php == '8.4'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
