@@ -37,7 +37,7 @@ jobs:
       contents: write # push the bump branch
       pull-requests: write # open the bump PR
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -99,6 +99,26 @@ jobs:
 
           echo "new version: $new_version"
           echo "new digest:  $new_digest"
+
+          # Upstream's Latest flag does not follow dpkg ordering (a lower package
+          # revision can be published after a higher one), so a tag change alone
+          # may be a downgrade. Equal versions pass: a rebuild under a new tag.
+          : "${cur_version:?could not read ARG FREEUNIT_VERSION}"
+          # Explicit rc: inside `if`, a missing dpkg (127) would read as "not
+          # older" and let the downgrade through. 0 = older, 1 = not older.
+          cmp_rc=0
+          dpkg --compare-versions "$new_version" lt "$cur_version" || cmp_rc=$?
+          case "$cmp_rc" in
+            0)
+              echo "::warning::latest upstream $new_release ships $new_version, older than pinned $cur_version; not opening a downgrade PR"
+              exit 0
+              ;;
+            1) ;;
+            *)
+              echo "ERROR: dpkg --compare-versions $new_version lt $cur_version failed (rc=$cmp_rc)" >&2
+              exit 1
+              ;;
+          esac
 
           # Patch the three ARGs in place.
           sed -i \
