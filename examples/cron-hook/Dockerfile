@@ -14,8 +14,8 @@ FROM ghcr.io/6run0/freeunit-php:trixie-php8.4
 # (unlike system cron, which daemonizes and logs to syslog). Pinned by version
 # and SHA256 and verified on download, mirroring how the base image fetches and
 # checks its own release assets. amd64 only, matching the base image's platform.
-ARG SUPERCRONIC_VERSION=v0.2.46
-ARG SUPERCRONIC_SHA256=5adff01c5a797663948e656d2b61d10932369ee437eb5cb54fa872b2960f222b
+ARG SUPERCRONIC_VERSION=v0.2.51
+ARG SUPERCRONIC_SHA256=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
 RUN set -eux; \
     curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' \
         -o /usr/local/bin/supercronic \
