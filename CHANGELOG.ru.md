@@ -10,6 +10,19 @@
 
 ## [Не выпущено]
 
+## [0.2.0] - 2026-11-02
+
+### Изменено
+
+- Встроенный FreeUnit поднят до `1.37.1` (`1.37.1-1`, ранее `1.36.0-1`),
+  пересчитан trust-anchor `FREEUNIT_SHA256SUMS_SHA256`. Апстрим убрал суффикс
+  `-buildN` из тегов выпусков, поэтому неизменяемый тег образа этого выпуска -
+  `trixie-1.37.1-php<X.Y>`.
+- `examples/cron-hook`: supercronic `v0.2.51` (ранее `v0.2.46`).
+- Бот обновления FreeUnit (`check-upstream.yml`) не открывает PR, если выпуск с
+  пометкой Latest у апстрима несёт `.deb` старше закреплённой версии; при равной
+  версии (пересборка под новым тегом) обновление проходит.
+
 ## [0.1.0] - 2026-07-17
 
 ### Изменено
@@ -304,7 +317,8 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.7...v0.0.8

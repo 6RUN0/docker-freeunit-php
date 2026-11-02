@@ -10,6 +10,19 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-02
+
+### Changed
+
+- Bumped the bundled FreeUnit to `1.37.1` (`1.37.1-1`, up from `1.36.0-1`) and
+  recomputed the `FREEUNIT_SHA256SUMS_SHA256` trust anchor. Upstream dropped the
+  `-buildN` suffix from its release tags, so the immutable image tag of this
+  release is `trixie-1.37.1-php<X.Y>`.
+- `examples/cron-hook`: supercronic `v0.2.51` (up from `v0.2.46`).
+- The FreeUnit bump bot (`check-upstream.yml`) no longer opens a PR when the
+  release marked Latest upstream ships an older `.deb` version than the pinned
+  one; an equal version (a rebuild under a new tag) is still bumped.
+
 ## [0.1.0] - 2026-07-17
 
 ### Changed
@@ -294,7 +307,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.7...v0.0.8
