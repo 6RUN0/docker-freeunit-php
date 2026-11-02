@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tooling
 
-`.mcp.json` stays tracked — keep it in git, do not gitignore it. It wires two
+`.mcp.json` is local and untracked (`.gitignore` is an allowlist). It wires
 local MCP servers — use them:
 
 - **codegraph** — a queryable knowledge graph of the codebase. Consult it
