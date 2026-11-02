@@ -258,6 +258,10 @@ The two reusable routines above are the public surface handlers build on.
 - `.github/dependabot.yml` — weekly grouped bumps for the SHA-pinned GitHub
   Actions only (the docker manager can't parse the ARG-interpolated `FROM`, and
   the FreeUnit `.deb` bump is `check-upstream.yml`'s job).
+- Both bots open their PRs against `develop` (`target-branch` /
+  `BUMP_BASE`). Dependabot reads its config only from the default branch
+  (`main`), so a change to `dependabot.yml` takes effect once it reaches `main`;
+  security updates ignore `target-branch` and still target `main`.
 
 ## Gotchas
 
