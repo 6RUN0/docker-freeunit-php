@@ -106,13 +106,17 @@ the `FROM` line; they are re-declared inside stages that use them in `RUN`.
 
 ### Critical packaging detail (asset name vs deb version)
 
-GitHub renames the `~` in deb version strings to `.` in asset file names, so the
-**same** package is downloaded as `freeunit_1.35.6-1.trixie_amd64.deb` but its real
-version (and its `SHA256SUMS` entry) is `1.35.6-1~trixie`. The Dockerfile downloads
-with `curl -o` into the **`~` name** so `sha256sum -c --ignore-missing` actually
-matches the file. Saving under the `.` name would make the checksum check pass
-**vacuously** (no matching filename → entry skipped) — a silent integrity hole.
-In the `RUN`: `deb_ver=${FREEUNIT_VERSION}~${SUITE}`, `asset_ver=${FREEUNIT_VERSION}.${SUITE}`.
+GitHub renames the `~` in deb version strings to `.` in asset file names, so a
+package is always downloaded as `freeunit_<ver>.trixie_amd64.deb`. Its
+`SHA256SUMS` entry has one of two forms: `freeunit_<ver>~trixie_amd64.deb`
+(releases up to `1.37.1`) or `freeunit_<ver>.trixie_amd64.deb` (from
+`1.37.2-2`). The Dockerfile looks up which form `SHA256SUMS` lists and saves the
+file under **that exact name** with `curl -o`, so `sha256sum -c --ignore-missing`
+actually matches it. If the name differs, the entry is skipped and the check
+passes **vacuously**, which is a silent integrity hole. A package missing from
+`SHA256SUMS` in both forms fails the build. In the `RUN`:
+`deb_ver=${FREEUNIT_VERSION}~${SUITE}`, `asset_ver=${FREEUNIT_VERSION}.${SUITE}`.
+`check-upstream.yml` parses both forms too.
 
 `SHA256SUMS` is fetched from the same release it vouches for, so on its own it
 proves nothing — a tampered release could ship a matching `SHA256SUMS`. The

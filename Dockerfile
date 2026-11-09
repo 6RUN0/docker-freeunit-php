@@ -119,24 +119,24 @@ RUN \
 
 # FreeUnit core daemon + php module from prebuilt .deb
 #
-# GitHub renames the '~' in asset file names to '.', so the same package
-# is published as  ${BRAND}_<ver>.<suite>_amd64.deb  (download URL) while its
-# real version / SHA256SUMS entry is  <ver>~<suite>. Files are saved under
-# the '~' name so `sha256sum -c` actually matches (with the '.' name the
-# entries are skipped and the check passes vacuously).
+# GitHub renames the '~' in asset file names to '.', so the download URL is
+# always  ${BRAND}_<ver>.<suite>_amd64.deb, while SHA256SUMS lists either
+# <ver>~<suite> (releases up to 1.37.1) or <ver>.<suite> (from 1.37.2-2). Each
+# file is saved under the name SHA256SUMS lists, so `sha256sum -c` matches it
+# (under any other name the entry is skipped and the check passes vacuously).
 FROM php_image AS final_image
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SUITE
 ARG PHP_VER
-ARG FREEUNIT_VERSION=1.37.1-1
-ARG FREEUNIT_RELEASE=1.37.1
+ARG FREEUNIT_VERSION=1.37.2-2
+ARG FREEUNIT_RELEASE=1.37.2-2
 # SHA256 of the release's SHA256SUMS file, pinned in version control as a trust
 # anchor. The .deb integrity check below verifies each package against
 # SHA256SUMS, but that file is fetched from the same release, so a release
 # compromise could replace both the .debs and their checksums. Pinning the
 # manifest digest here breaks that self-reference: tampering no longer passes,
 # because the expected value lives in this repo. Bump it with FREEUNIT_RELEASE.
-ARG FREEUNIT_SHA256SUMS_SHA256=3de497a767faec6f183774646151d3615fb0b291f0d7cc51b35630224c28da69
+ARG FREEUNIT_SHA256SUMS_SHA256=ef2eeb5267fcd2316b9aea7aafd5ea22270bf743db0cfe0daa131677973890ec
 ARG FREEUNIT_BASE_URL="https://github.com/6RUN0/freeunit/releases/download"
 # Brand identity, mirroring the upstream freeunit packaging vocabulary
 # (freeunit/pkg/deb/Makefile): BRAND is the dpkg/apt identity (asset/package
@@ -157,7 +157,8 @@ ARG HOMEPAGE=https://freeunit.org
 ARG DOCS_URL=https://docs.freeunit.org
 # DL3003: the work dir is created at build time with `mktemp -d`, so its path is
 # dynamic and cannot be expressed with WORKDIR — `cd` into it is intentional.
-# hadolint ignore=DL3003
+# DL3008: "$@" holds the two local .deb paths, pinned by SHA256SUMS, not repo names.
+# hadolint ignore=DL3003,DL3008
 RUN \
     set -eux; \
     php_ver="${PHP_VER}"; \
@@ -175,23 +176,23 @@ RUN \
     # of pipes (hadolint DL4006) — `sha256sum FILE` prints "<hash>  FILE".
     [ "$(sha256sum SHA256SUMS)" = "${FREEUNIT_SHA256SUMS_SHA256}  SHA256SUMS" ] \
     || { echo "ERROR: SHA256SUMS digest does not match the pinned FREEUNIT_SHA256SUMS_SHA256"; exit 1; }; \
-    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "${BRAND}_${deb_ver}_amd64.deb" "${url}/${BRAND}_${asset_ver}_amd64.deb"; \
-    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" "${url}/${BRAND}-php${php_ver}_${asset_ver}_amd64.deb"; \
+    # Pick each package's local name from SHA256SUMS. A missing entry fails
+    # here: `--ignore-missing` below would otherwise pass vacuously and an
+    # unverified .deb would be installed silently.
+    set --; \
+    for pkg in "${BRAND}" "${BRAND}-php${php_ver}"; do \
+    if grep -qF "${pkg}_${deb_ver}_amd64.deb" SHA256SUMS; then name="${pkg}_${deb_ver}_amd64.deb"; \
+    elif grep -qF "${pkg}_${asset_ver}_amd64.deb" SHA256SUMS; then name="${pkg}_${asset_ver}_amd64.deb"; \
+    else echo "ERROR: no SHA256SUMS entry for ${pkg}_${deb_ver}_amd64.deb or ${pkg}_${asset_ver}_amd64.deb"; exit 1; \
+    fi; \
+    curl -fsSL --retry 3 --retry-connrefused --proto-redir '=https' -o "$name" "${url}/${pkg}_${asset_ver}_amd64.deb"; \
+    set -- "$@" "./$name"; \
+    done; \
     sha256sum -c --ignore-missing SHA256SUMS; \
-    # --ignore-missing passes vacuously if an expected name is absent from
-    # SHA256SUMS (e.g. upstream asset rename), so assert both entries exist —
-    # otherwise an unverified .deb would be installed silently.
-    grep -qF "${BRAND}_${deb_ver}_amd64.deb" SHA256SUMS \
-    || { echo "ERROR: no SHA256SUMS entry for ${BRAND}_${deb_ver}_amd64.deb"; exit 1; }; \
-    grep -qF "${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" SHA256SUMS \
-    || { echo "ERROR: no SHA256SUMS entry for ${BRAND}-php${php_ver}_${deb_ver}_amd64.deb"; exit 1; }; \
     apt-get update; \
     # apt resolves libphp${php_ver}-embed (already present) and the virtual
     # ${RUNTIME}-rX.Y.Z provided by the core ${BRAND} package from the two local files
-    apt-get install -y --no-install-recommends \
-    "./${BRAND}_${deb_ver}_amd64.deb" \
-    "./${BRAND}-php${php_ver}_${deb_ver}_amd64.deb" \
-    ; \
+    apt-get install -y --no-install-recommends "$@"; \
     cd /; \
     rm -rf "$work"; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \

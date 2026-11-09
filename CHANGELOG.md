@@ -10,6 +10,15 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped the bundled FreeUnit to `1.37.2-2` (up from `1.37.1-1`) and recomputed
+  the `FREEUNIT_SHA256SUMS_SHA256` trust anchor.
+- From `1.37.2-2` upstream lists packages in `SHA256SUMS` as
+  `<ver>.<suite>` instead of `<ver>~<suite>`. The build and the bump bot accept
+  both forms, so a `FREEUNIT_RELEASE` override to an older release still builds;
+  a package missing from `SHA256SUMS` in both forms fails the build.
+
 ## [0.2.0] - 2026-11-02
 
 ### Changed
