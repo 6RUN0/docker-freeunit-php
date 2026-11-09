@@ -18,13 +18,9 @@ services:
     image: freeunit-php-cron-example
     ports:
       - "8080:8080"
+    # Both roles run as the non-root image user 65532 and keep no capability.
     cap_drop:
       - ALL
-    cap_add:
-      # The Unit master starts as root and drops each worker to the app
-      # user/group from config.json; SETUID/SETGID are all it needs.
-      - SETUID
-      - SETGID
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -46,12 +42,6 @@ services:
       disable: true
     cap_drop:
       - ALL
-    cap_add:
-      # The hook provisions a dedicated `worker` user and drops root -> worker via
-      # setpriv (exec_as_user), which needs the same two capabilities the Unit
-      # master uses to drop its workers in the web role.
-      - SETUID
-      - SETGID
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

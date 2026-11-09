@@ -8,9 +8,7 @@
         "app": {
             "type": "php",
             "root": "/www/",
-            "script": "index.php",
-            "user": "freeunit",
-            "group": "freeunit"
+            "script": "index.php"
         }
     }
 }

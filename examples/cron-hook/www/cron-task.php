@@ -6,10 +6,9 @@
 // therefore the launch mode the hook selects. Writing to stdout is enough:
 // supercronic captures it, so `docker compose logs cron` shows each run.
 //
-// The hook provisions a dedicated `worker` user (uid/gid 1500) via setup_user
-// and drops to it with exec_as_user, so this task runs UNPRIVILEGED and NOT as
-// `freeunit`. Print the effective identity to prove it -- the line reads like the
-// `id` command: uid=1500(worker) gid=1500(worker).
+// The container runs as the non-root image user, so this task runs
+// UNPRIVILEGED. Print the effective identity to prove it -- the line reads like
+// the `id` command: uid=65532(nonroot) gid=65532(nonroot).
 $uid = posix_geteuid();
 $gid = posix_getegid();
 $uname = posix_getpwuid($uid)['name'] ?? '?';

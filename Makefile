@@ -38,9 +38,15 @@ TARGETS := $(addprefix php,$(PHP_VERSIONS))
 
 SHELL_SCRIPTS := $(shell find rootfs test -type f -name '*.sh' 2>/dev/null)
 
+# Scripts that run inside the image under /bin/sh (dash) and must stay portable
+# POSIX sh: parsed by every POSIX shell installed here (dash, busybox sh).
+POSIX_SCRIPTS := rootfs/docker-entrypoint.sh rootfs/docker-entrypoint-common.sh \
+  rootfs/docker-healthcheck.sh test/entrypoint-lib-cases.sh \
+  examples/cron-hook/supercronic-hook.sh $(wildcard examples/*/docker-entrypoint.d/*.sh)
+
 DEFAULT_IMAGE := $(IMAGE):$(SUITE)-php$(DEFAULT_PHP)
 
-.PHONY: help all latest test test-entrypoint test-examples scan lint lint-dockerfile lint-shell lint-md lint-typos $(TARGETS)
+.PHONY: help all latest test test-entrypoint test-examples scan lint lint-dockerfile lint-shell lint-posix lint-md lint-typos $(TARGETS)
 
 # Keep bare `make` building the whole matrix even though `help` is defined first
 # (a target ahead of `all` would otherwise become the default goal).
@@ -59,9 +65,10 @@ help: ## list the available targets
 
 all: $(TARGETS) ## build every PHP version (the default target)
 
-# The immutable tag carries FREEUNIT_RELEASE (the unique build id) so rebuilding
-# a different build of the same version does not overwrite an existing tag; the
-# $(SUITE)-php$* tag floats to the latest build.
+# Local tags only: $(SUITE)-$(FREEUNIT_RELEASE)-php$* names the FreeUnit build,
+# $(SUITE)-php$* floats to the latest build. Neither is immutable here; the
+# published immutable tags also carry the image version and are created by
+# .github/workflows/release.yml, which refuses to overwrite an existing one.
 $(TARGETS): php%:
 	docker build $(DOCKER_BUILD_EXTRA) \
 	  --build-arg SUITE=$(SUITE) \
@@ -107,7 +114,7 @@ scan: ## CVE-scan the default image (trivy/grype if installed)
 
 # Run every linter that is installed (a missing tool is skipped, not an error;
 # an installed tool that reports problems fails the target).
-lint: lint-dockerfile lint-shell lint-md lint-typos ## run all installed linters
+lint: lint-dockerfile lint-shell lint-posix lint-md lint-typos ## run all installed linters
 
 lint-dockerfile:
 	@if command -v hadolint >/dev/null 2>&1; then \
@@ -118,6 +125,16 @@ lint-shell:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 	  echo "shellcheck $(SHELL_SCRIPTS)"; shellcheck $(SHELL_SCRIPTS); \
 	else echo "shellcheck not installed, skipping shell lint"; fi
+
+lint-posix:
+	@if command -v dash >/dev/null 2>&1; then \
+	  echo "dash -n $(POSIX_SCRIPTS)"; \
+	  for f in $(POSIX_SCRIPTS); do dash -n "$$f" || exit 1; done; \
+	else echo "dash not installed, skipping dash syntax check"; fi
+	@if command -v busybox >/dev/null 2>&1; then \
+	  echo "busybox sh -n $(POSIX_SCRIPTS)"; \
+	  for f in $(POSIX_SCRIPTS); do busybox sh -n "$$f" || exit 1; done; \
+	else echo "busybox not installed, skipping busybox sh syntax check"; fi
 
 lint-md:
 	@if command -v rumdl >/dev/null 2>&1; then \

@@ -37,63 +37,54 @@ This example adds exactly one such file,
 [`supercronic-hook.sh`](supercronic-hook.sh), copied to
 `/docker-entrypoint-hook.d/supercronic.sh`:
 
-```bash
+```sh
 handle_supercronic() {
     shift                                        # drop the command word; "$@" = operator flags
-    local crontab="${SUPERCRONIC_CRONTAB:-/etc/supercronic/crontab}"
-    local -a default_opts=()                     # baked-in defaults (array: space-safe)
+    supercronic_crontab=${SUPERCRONIC_CRONTAB:-/etc/supercronic/crontab}  # prefixed: no `local`
+    # set -- -passthrough-logs "$@"              # baked-in defaults, in front of operator flags
     run_entrypoint_scripts                       # reuse a public core-library routine
-    local cron_user="worker"
-    setup_user "$cron_user" 1500 "$cron_user" 1500   # provision a dedicated user
-    log_notice "starting supercronic cron runner ($crontab) as $cron_user"
-    exec_as_user "$cron_user" "$cron_user" \
-        supercronic "${default_opts[@]}" "$@" "$crontab"   # drop root -> worker, then exec
+    log_notice "starting supercronic cron runner ($supercronic_crontab) as uid $(id -u)"
+    exec supercronic "$@" "$supercronic_crontab" # already non-root: just exec
 }
 ```
 
 Starting the container with `command: ["supercronic"]` (see
 [`docker-compose.yml`](docker-compose.yml)) makes the dispatcher call
 `handle_supercronic`. It reuses the base library's public functions
-(`run_entrypoint_scripts`, `exec_as_user`, `log_notice`) and **execs** the cron
-runner, which then becomes the container's main process.
+(`run_entrypoint_scripts`, `log_notice`) and **execs** the cron runner, which
+then becomes the container's main process.
 
 The hook is written as a reusable template rather than a one-off. Because the
 dispatcher invokes `handle_<cmd> "$@"` with the full argv, `$1` is always the
 command word: `shift` it off and `"$@"` holds exactly the flags the operator
 appended. So `command: ["supercronic", "-debug", "-split-logs"]` (or
 `docker run IMG supercronic -debug`) forwards those flags straight to the
-runner. Defaults live in a `default_opts` array (space-safe, and operator flags
-that follow can override them), the crontab path is an env-overridable
+runner. Defaults go in front of them with `set -- -flag "$@"` (the positional
+parameters are the one space-safe list of POSIX sh, and operator flags that
+follow can override them), the crontab path is an env-overridable
 `SUPERCRONIC_CRONTAB`, and the positional crontab stays last where supercronic
 expects it — patterns that carry over to any companion command.
 
 The contract the hook follows (enforced by the entrypoint):
 
-- The file only **defines** `handle_*` functions — no top-level side effects (it
-  is sourced as root before any privilege drop).
+- The file is **POSIX sh** (the entrypoint is `/bin/sh`, dash) and only
+  **defines** `handle_*` functions - no top-level side effects (it is sourced
+  into the entrypoint shell before the launch).
+- Every variable it sets carries its own prefix (`supercronic_`): there is no
+  `local`, and `UNIT_*`, `ENTRYPOINT_*`, `_ep_*` belong to the entrypoint.
 - The handler **execs** the final process; returning or exiting is a fatal
   contract violation.
 - It does not shadow the core library's function names or the
-  `UNIT_*` / `ENTRYPOINT_*` / `APPLICATION_*` variables.
+  `UNIT_*` / `ENTRYPOINT_*` variables.
 
-## A dedicated user for the cron role
+## The cron role's user
 
-Rather than reuse the base `freeunit` user, the hook provisions its own `worker`
-user (uid/gid 1500) with the public `setup_user` routine and drops to it — so the
-cron jobs run under their own least-privilege identity. Two details worth noting:
-
-- **A new name is required for a custom uid.** `setup_user` keeps the existing
-  id of a user that already exists, and the base `freeunit` user is created by the
-  core package's postinst with a system-range UID. So passing `1500` to a
-  re-provisioned `freeunit` would be ignored (and logged). Using a fresh name
-  (`worker`) is what makes the custom uid take effect.
-- **The uid/gid must be free.** `setup_user` dies with an actionable message if
-  `1500` is already taken — pick another free id or pre-create the user.
-
-`worker` is created with no app directory and is not granted write access to
-anything; the demo task only reads `/www` (root-owned, world-readable) and prints
-its identity. `cron-task.php` prints `uid=…(…) gid=…(…)`, so the logs show the
-jobs running as `uid=1500(worker)`, not as `freeunit`.
+The entrypoint already runs as the non-root image user `nonroot` (65532), so the
+hook does no privilege drop: the cron jobs run as that user. The demo task only
+reads `/www` (root-owned, world-readable) and prints its identity:
+`cron-task.php` prints `uid=...(...) gid=...(...)`, so the logs show the jobs
+running as `uid=65532(nonroot)`. A different uid for the cron role is a
+different `user:` in compose, with its own writable mounts.
 
 ## What it shows
 
@@ -103,10 +94,10 @@ jobs running as `uid=1500(worker)`, not as `freeunit`.
   one hook file to `/docker-entrypoint-hook.d/`.
 - [`docker-compose.yml`](docker-compose.yml) — two services, one image: `web`
   uses the default command; `cron` overrides it with `supercronic`. Both run
-  under the same hardening (`cap_drop: [ALL]`, `cap_add: [SETUID, SETGID]`,
-  `no-new-privileges`) — even the cron role keeps `SETUID`/`SETGID` because it
-  drops to the `worker` user itself via `setpriv` (`exec_as_user`), just as the
-  Unit master does for its workers.
+  under the same hardening (`cap_drop: [ALL]`, `no-new-privileges`, no
+  `cap_add`).
+- The base image runs as 65532: the `Dockerfile` switches to `USER 0:0` to
+  install `supercronic` and back to `USER 65532:65532` at the end.
 - The cron role never starts Unit: the hook execs `supercronic` before the
   entrypoint reaches its first-run/`freeunitd` path, so `config.json` is simply
   unused there. Because nothing listens on the control socket, the cron service
@@ -119,7 +110,7 @@ jobs running as `uid=1500(worker)`, not as `freeunit`.
 docker compose up --build -d
 curl -s http://localhost:8080/ | grep 'web role'           # web role serves
 sleep 3                                                     # the crontab fires every second
-docker compose logs cron | grep 'uid=1500(worker)'         # cron runs as worker, not freeunit
+docker compose logs cron | grep 'uid=65532(nonroot)'       # cron runs as the non-root image user
 docker compose down -v
 ```
 
@@ -129,5 +120,5 @@ You could maintain a separate cron image, but it would either duplicate the base
 entrypoint (and drift from its fixes) or override it (and lose them). The hook
 keeps `/docker-entrypoint.sh` authoritative: add one small file declaring a new
 launch mode, and the base image's hardening — bounded daemon waits, validated
-pidfile handling, privilege drop, hook vetting — applies to your companion
+pidfile handling, the root guard, hook vetting - applies to your companion
 service for free.

@@ -60,8 +60,8 @@ image ships.
 - [`config.json`](config.json) — one listener, a two-step route (URI match +
   share/fallback), and two PHP applications with distinct `options` and
   `environment`.
-- Hardening — the same `cap_drop: [ALL]` + `cap_add: [SETUID, SETGID]` +
-  `no-new-privileges` block as [`basic/`](../basic/), so the workers run
+- Hardening - the same `cap_drop: [ALL]` + `no-new-privileges` block as
+  [`basic/`](../basic/); the image user is non-root, so the workers run
   unprivileged.
 
 ## Verify

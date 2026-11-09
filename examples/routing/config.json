@@ -29,8 +29,6 @@
             "type": "php",
             "root": "/www/public/",
             "script": "index.php",
-            "user": "freeunit",
-            "group": "freeunit",
             "options": {
                 "admin": {
                     "memory_limit": "256M",
@@ -49,8 +47,6 @@
             "type": "php",
             "root": "/www/admin/",
             "script": "index.php",
-            "user": "freeunit",
-            "group": "freeunit",
             "options": {
                 "file": "/www/admin/php.ini"
             }

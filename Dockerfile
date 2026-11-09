@@ -114,6 +114,14 @@ RUN \
     echo "WARNING: $pkg not in index on sury, skipping"; \
     fi; \
     done; \
+    # The container runs read_only as a non-root user with /tmp as its only
+    # writable temp dir (a mount owned by the process), where PHP and its
+    # extensions put temp files by default. Sessions default to the root-owned
+    # /var/lib/php/sessions instead: point both SAPIs there too, cli (drush,
+    # cron) and embed (the Unit module).
+    for sapi in cli embed; do \
+    echo 'session.save_path = /tmp' > "/etc/php/${php_ver}/${sapi}/conf.d/90-nonroot-session.ini"; \
+    done; \
     rm -rf /var/lib/apt/lists/*;
 
 
@@ -155,6 +163,10 @@ ARG RUNDIR=/var/run
 ARG BRAND_TITLE=FreeUnit
 ARG HOMEPAGE=https://freeunit.org
 ARG DOCS_URL=https://docs.freeunit.org
+# The image user; must equal UNIT_NONROOT_UID/GID in
+# rootfs/docker-entrypoint-common.sh, which the build asserts after COPY rootfs/.
+ARG NONROOT_UID=65532
+ARG NONROOT_GID=65532
 # DL3003: the work dir is created at build time with `mktemp -d`, so its path is
 # dynamic and cannot be expressed with WORKDIR — `cd` into it is intentional.
 # DL3008: "$@" holds the two local .deb paths, pinned by SHA256SUMS, not repo names.
@@ -204,14 +216,18 @@ RUN \
     /var/log/apt* \
     /var/log/dpkg.log \
     ; \
-    # the ${BRAND} package postinst creates the ${RUNTIME}:${RUNTIME} system user/group
-    # State directory: kept root-owned so the root ${RUNTIME}d master can create its
-    # certs/ and scripts/ stores even under --cap-drop=ALL, which strips
-    # CAP_DAC_OVERRIDE (a ${RUNTIME}-owned statedir would make those mkdirs fail with
-    # EACCES, breaking startup). The per-app worker drops to '${RUNTIME}' via the Unit
-    # config's user/group keys, not via statedir ownership.
-    rm -rf "/var/lib/${RUNTIME}"; \
-    mkdir -p "/var/lib/${RUNTIME}"; \
+    # The image user (distroless 'nonroot'); the whole daemon runs as it, so the
+    # package's ${RUNTIME}:${RUNTIME} system user and /var/lib/${RUNTIME} stay
+    # unused. -l: no lastlog/faillog entry, which for a high uid is a large file.
+    # The home dir is empty and 0755, so any other uid given HOME=/home/nonroot
+    # reads it as an empty read-only HOME instead of failing with EACCES.
+    groupadd -g "${NONROOT_GID}" nonroot; \
+    useradd -l -u "${NONROOT_UID}" -g "${NONROOT_GID}" -M -d /home/nonroot -s /usr/sbin/nologin nonroot; \
+    install -d -m 0755 -o "${NONROOT_UID}" -g "${NONROOT_GID}" /home/nonroot; \
+    # /run holds the control socket, pid, state and generated dirs (a tmpfs owned
+    # by the process under read_only); owned by the image user so that a run
+    # without read_only and tmpfs works the same way.
+    chown "${NONROOT_UID}:${NONROOT_GID}" /run; \
     # preparing init dir
     mkdir -p /docker-entrypoint.d; \
     # entrypoint extension dir: child images drop *.sh handlers here (see
@@ -220,9 +236,9 @@ RUN \
     # log to stdout
     ln -sf /dev/stdout "/var/log/${RUNTIME}.log"; \
     # Assert the prebuilt binary's compiled identity matches RUNTIME/RUNDIR. We
-    # only INSTALL .debs, so the statedir/log paths created above and the socket/
-    # pid the entrypoint+healthcheck use are correct ONLY if the daemon was
-    # compiled with the same. `--version` prints the configure line; a mismatch
+    # only INSTALL .debs, so the log symlink created above and the socket/pid
+    # paths the entrypoint and the healthcheck use are correct ONLY if the daemon
+    # was compiled with the same. `--version` prints the configure line; a mismatch
     # means upstream changed its on-disk identity — fail now, not at runtime.
     ver="$("${RUNTIME}d" --version 2>&1)"; \
     echo "$ver"; \
@@ -242,6 +258,18 @@ RUN \
 WORKDIR /
 # rootfs/ mirrors the container filesystem (entrypoint scripts, configs, ...)
 COPY rootfs/ /
+# The root guard of the entrypoint drops to the library literals and the default
+# USER below is this ARG pair: assert both name the passwd entry created above.
+RUN \
+    set -eu; \
+    lib=/docker-entrypoint-common.sh; \
+    uid="$(sed -n 's/^readonly UNIT_NONROOT_UID=//p' "$lib")"; \
+    gid="$(sed -n 's/^readonly UNIT_NONROOT_GID=//p' "$lib")"; \
+    home="$(sed -n 's/^readonly UNIT_NONROOT_HOME=//p' "$lib")"; \
+    want="nonroot:x:${uid}:${gid}::${home}:/usr/sbin/nologin"; \
+    got="$(getent passwd nonroot)"; \
+    [ "$got" = "$want" ] && [ "$uid:$gid" = "${NONROOT_UID}:${NONROOT_GID}" ] \
+    || { echo "ERROR: passwd entry '$got' or ARG NONROOT_UID/GID ${NONROOT_UID}:${NONROOT_GID} does not match the library literals '$want'"; exit 1; }
 LABEL org.opencontainers.image.title="${BRAND}-php" \
       org.opencontainers.image.description="${BRAND_TITLE} (NGINX Unit fork) with an embedded PHP ${PHP_VER} module on Debian ${SUITE}" \
       org.opencontainers.image.source="https://github.com/6RUN0/docker-freeunit-php" \
@@ -253,12 +281,15 @@ LABEL org.opencontainers.image.title="${BRAND}-php" \
 # runtime (so no fixed port to probe), but a responsive control API proves the
 # daemon and the embedded PHP module are up. The probe is a script so the socket
 # path stays single-sourced from docker-entrypoint-common.sh (UNIT_CONTROL_SOCKET)
-# rather than duplicated here — an exec-form CMD cannot expand a build ARG/ENV.
-# Runs as root (image default), which owns the 0600 socket, so it works even
-# under --cap-drop=ALL.
+# rather than duplicated here - an exec-form CMD cannot expand a build ARG/ENV.
+# It runs as the container user, which owns the 0600 socket together with the
+# daemon.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["/docker-healthcheck.sh"]
 # No CMD: docker-entrypoint.sh supplies the default launch (${RUNTIME}d against
 # the control socket) from the same UNIT_* single source, so the binary name and
 # socket path are not duplicated in an exec-form CMD that cannot take a build ARG.
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+# Non-root from the first instruction. A derived image needs USER 0:0 before
+# its own RUN apt-get and USER 65532:65532 again at the end.
+USER ${NONROOT_UID}:${NONROOT_GID}

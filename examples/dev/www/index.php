@@ -9,10 +9,10 @@ echo "freeunit-php dev example\n";
 echo 'served by PHP ' . PHP_VERSION . " through FreeUnit\n";
 echo "edit www/index.php and reload -- no rebuild needed\n\n";
 
-// Prove the writable named volume works: APPLICATION_DIR=/data with
-// APPLICATION_CHOWN=yes made the entrypoint chown /data to the app user at
-// startup, so this unprivileged worker can write there. Each request appends a
-// timestamp and reads the file back.
+// Prove the writable named volume works: the Dockerfile creates /data owned by
+// the image user and a fresh named volume copies that owner, so this
+// unprivileged worker can write there. Each request appends a timestamp and
+// reads the file back.
 $marker = '/data/visits.log';
 file_put_contents($marker, date('c') . "\n", FILE_APPEND | LOCK_EX);
 

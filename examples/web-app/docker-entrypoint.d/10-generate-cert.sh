@@ -7,12 +7,14 @@
 # use `curl -k`, disabling verification). For production, do NOT generate a cert:
 # mount or bake a real CA-issued bundle as webapp.pem and delete this script.
 #
-# This runs as root during first-run, BEFORE apply_certificates. It writes the
-# bundle into /docker-entrypoint.d so the next applicator step uploads it. Unit
-# expects a bundle = certificate chain followed by the private key, in one file.
+# This runs as the container user during initial configuration, BEFORE
+# apply_certificates. It writes the bundle into $ENTRYPOINT_GENERATED_DIR (set by
+# the entrypoint), whose *.pem are uploaded right after those of
+# /docker-entrypoint.d. Unit expects a bundle = certificate chain followed by the
+# private key, in one file.
 set -eu
 
-cert=/docker-entrypoint.d/webapp.pem
+cert="${ENTRYPOINT_GENERATED_DIR:?run by the freeunit-php entrypoint}/webapp.pem"
 
 # Idempotent: first-run only fires on an empty state dir, but guard anyway so a
 # baked or mounted real cert is never overwritten.

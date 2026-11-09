@@ -11,12 +11,10 @@ services:
     build: .
     ports:
       - "8080:8080"
+    # The image runs as the non-root user 65532, Unit included, so it keeps no
+    # capability at all.
     cap_drop:
       - ALL
-    cap_add:
-      # hardening block: keep identical to examples/basic/docker-compose.yml
-      - SETUID
-      - SETGID
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

@@ -77,7 +77,25 @@ jobs:
           echo "${SHELLCHECK_SHA256}  ${tarball}" | sha256sum -c -
           tar -xJf "$tarball"
           "shellcheck-${SHELLCHECK_VERSION}/shellcheck" --version
-          "shellcheck-${SHELLCHECK_VERSION}/shellcheck" rootfs/*.sh test/*.sh
+          "shellcheck-${SHELLCHECK_VERSION}/shellcheck" rootfs/*.sh test/*.sh \
+            examples/cron-hook/supercronic-hook.sh examples/*/docker-entrypoint.d/*.sh
+
+      # The entrypoint, the healthcheck and the hooks run under the image's
+      # /bin/sh (dash) and promise portability to any POSIX sh: they must parse
+      # under two shells, dash (ships on the runner) and busybox ash (installed
+      # from the runner's Ubuntu archive).
+      - name: POSIX sh syntax (dash -n, busybox sh -n)
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends busybox
+          for f in rootfs/*.sh test/entrypoint-lib-cases.sh \
+            examples/cron-hook/supercronic-hook.sh examples/*/docker-entrypoint.d/*.sh; do
+            dash -n "$f"
+            busybox sh -n "$f"
+          done
 
       - name: typos
         uses: crate-ci/typos@4c8b7f51ca60df14e3c5ca82770dfbbe6c3dae85 # v1.52.0

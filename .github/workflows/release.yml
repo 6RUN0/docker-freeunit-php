@@ -61,42 +61,65 @@ jobs:
             echo "FREEUNIT_RELEASE=${freeunit_release}"
           } >> "$GITHUB_ENV"
 
-      # Reuses the Makefile target: builds php$PHP with the immutable and
-      # floating tags, then runs the end-to-end smoke test against it.
-      - name: build + smoke test
-        run: make test DEFAULT_PHP="$PHP" IMAGE="$IMAGE"
-
       - name: log in to GHCR
         env:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 
-      # Push the two tags make produced (floating + immutable), add a
-      # release-version tag, and on the default PHP line also publish :latest and
-      # the bare :$VERSION so `docker pull $IMAGE` and `:$VERSION` resolve.
-      - name: tag + push
+      # The immutable tags carry the image version: the FreeUnit tag
+      # (<suite>-<freeunit-release>-v<version>-php<X.Y>), <version>-php<X.Y> and,
+      # on the default PHP line, the bare <version>. None may exist yet: a
+      # rebuilt image never has the published digest, so overwriting one would
+      # silently change what a pinned tag means. Checked before the build and
+      # before anything is pushed, so a refused run fails fast and leaves the
+      # registry untouched.
+      - name: refuse existing immutable tags
         run: |
+          set -euo pipefail
+          tags="$IMAGE:${SUITE}-${FREEUNIT_RELEASE}-v${VERSION}-php${PHP} $IMAGE:${VERSION}-php${PHP}"
+          if [ "$PHP" = "$DEFAULT_PHP" ]; then
+            tags="$tags $IMAGE:${VERSION}"
+          fi
+          status=0
+          for tag in $tags; do
+            # Only "not found" counts as absent: a registry or auth error must not
+            # let the run go on and overwrite a tag it could not see. buildx
+            # 0.37.1 prints "ERROR: <ref>: not found" and exits 1 for a missing
+            # tag; another wording fails this step closed.
+            if out=$(docker buildx imagetools inspect "$tag" 2>&1); then
+              echo "::error::immutable tag $tag already exists; a partial release is finished by hand, see the comment on the push immutable tags step"
+              status=1
+            elif [[ "$out" != *": not found"* ]]; then
+              echo "::error::cannot check $tag: $out"
+              status=1
+            fi
+          done
+          echo "IMMUTABLE_TAGS=$tags" >> "$GITHUB_ENV"
+          exit "$status"
+
+      # Reuses the Makefile target: builds php$PHP with the floating tag, then
+      # runs the end-to-end smoke test against it.
+      - name: build + smoke test
+        run: make test DEFAULT_PHP="$PHP" IMAGE="$IMAGE"
+
+      # The floating tags go first; the attestations bind to the digest they
+      # resolve to. The immutable tags are created last, from that digest, so a
+      # failure anywhere before leaves none of them and a re-run of the job
+      # succeeds. Export the local ref too for the SBOM scan.
+      - name: push floating tags
+        run: |
+          set -euo pipefail
           floating="$IMAGE:${SUITE}-php${PHP}"
-          immutable="$IMAGE:${SUITE}-${FREEUNIT_RELEASE}-php${PHP}"
-          versioned="$IMAGE:${VERSION}-php${PHP}"
-          docker tag "$floating" "$versioned"
           docker push "$floating"
-          docker push "$immutable"
-          docker push "$versioned"
           if [ "$PHP" = "$DEFAULT_PHP" ]; then
             docker tag "$floating" "$IMAGE:latest"
-            docker tag "$floating" "$IMAGE:${VERSION}"
             docker push "$IMAGE:latest"
-            docker push "$IMAGE:${VERSION}"
           fi
-          # All tags for this PHP leg point at one image; resolve its registry
-          # digest once so the attestations below bind to the manifest, not a
-          # mutable tag. Export the local ref too for the SBOM scan.
-          digest=$(docker buildx imagetools inspect "$immutable" --format '{{ .Manifest.Digest }}')
+          digest=$(docker buildx imagetools inspect "$floating" --format '{{ .Manifest.Digest }}')
           {
             echo "IMAGE_DIGEST=$digest"
-            echo "IMAGE_REF=$immutable"
+            echo "IMAGE_REF=$floating"
           } >> "$GITHUB_ENV"
 
       # Scan the just-built image into an SPDX SBOM (from the local daemon, so no
@@ -156,6 +179,26 @@ jobs:
           subject-digest: ${{ env.IMAGE_DIGEST }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
+
+      # Point every immutable tag at the attested digest (a registry-side copy,
+      # no re-push of layers), then check that each resolves to it.
+      # --prefer-index=false copies the single manifest as is; by default buildx
+      # wraps it in a new index with another digest. If this step fails after
+      # creating some of the tags, a re-run is refused by the check above; finish
+      # by hand with the digest from this job's log:
+      #   docker buildx imagetools create --prefer-index=false --tag <missing-tag> <image>@<digest>
+      - name: push immutable tags
+        run: |
+          set -euo pipefail
+          for tag in $IMMUTABLE_TAGS; do
+            docker buildx imagetools create --prefer-index=false --tag "$tag" "$IMAGE@$IMAGE_DIGEST"
+            got=$(docker buildx imagetools inspect "$tag" --format '{{ .Manifest.Digest }}')
+            if [ "$got" != "$IMAGE_DIGEST" ]; then
+              echo "::error::$tag resolves to $got, expected $IMAGE_DIGEST"
+              exit 1
+            fi
+            echo "$tag -> $IMAGE_DIGEST"
+          done
 
       - name: log out of GHCR
         if: always()

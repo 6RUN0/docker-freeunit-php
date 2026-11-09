@@ -14,6 +14,9 @@ FROM ghcr.io/6run0/freeunit-php:trixie-php8.4
 # (unlike system cron, which daemonizes and logs to syslog). Pinned by version
 # and SHA256 and verified on download, mirroring how the base image fetches and
 # checks its own release assets. amd64 only, matching the base image's platform.
+# The base image runs as the non-root user 65532: switch to 0:0 to install into
+# /usr/local/bin, back to 65532 at the end.
+USER 0:0
 ARG SUPERCRONIC_VERSION=v0.2.51
 ARG SUPERCRONIC_SHA256=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
 RUN set -eux; \
@@ -44,3 +47,4 @@ COPY crontab /etc/supercronic/crontab
 # Because child images never overwrite /docker-entrypoint.sh, every base
 # robustness/security fix still reaches this image.
 COPY supercronic-hook.sh /docker-entrypoint-hook.d/supercronic.sh
+USER 65532:65532

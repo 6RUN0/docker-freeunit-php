@@ -10,13 +10,18 @@ services:
     build: .
     ports:
       - "8080:8080"
+    # Read-only root filesystem: the only writable paths are the two tmpfs
+    # mounts, owned by the image user. /run holds the Unit socket, pid and state;
+    # /tmp the request-body buffers and PHP temp files (a host dir on disk is
+    # the better place for large uploads).
+    read_only: true
+    tmpfs:
+      - /run:size=16m,uid=65532,gid=65532,mode=0700
+      - /tmp:size=64m,uid=65532,gid=65532,mode=0700
+    # The image runs as the non-root user 65532, Unit included, so it keeps no
+    # capability at all.
     cap_drop:
       - ALL
-    cap_add:
-      # The Unit master starts as root and drops each worker to the app
-      # user/group named in config.json; SETUID/SETGID are all it needs to do so.
-      - SETUID
-      - SETGID
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

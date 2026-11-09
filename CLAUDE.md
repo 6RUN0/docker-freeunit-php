@@ -66,8 +66,12 @@ All default to `freeunit` / `/var/run`. These are **not** free knobs (the prebui
 `.deb`s carry one fixed identity); they document intent and are asserted against
 the installed binary at build time (see below).
 
-The Makefile's immutable image tag is `$(SUITE)-$(FREEUNIT_RELEASE)-php$*` (the
-release is the unique build id), plus the floating `$(SUITE)-php$*`.
+The Makefile tags `$(SUITE)-$(FREEUNIT_RELEASE)-php$*` and the floating
+`$(SUITE)-php$*` locally; neither is immutable. The published immutable tags
+carry the image version and exist only in `release.yml`:
+`$(SUITE)-$(FREEUNIT_RELEASE)-v<version>-php<X.Y>`, `<version>-php<X.Y>` and the
+bare `<version>` (see Verification - Release). Up to v0.3.0 the FreeUnit tag had
+no version (`trixie-1.37.2-2-php*` stays the root-based 0.3.0 image).
 
 ## Dockerfile architecture (3 stages)
 
@@ -88,18 +92,25 @@ release is the unique build id), plus the floating `$(SUITE)-php$*`.
    `--ignore-missing` cannot pass vacuously), and `apt-get install`s the two local
    files (apt pulls
    `libphp${PHP_VER}-embed` already present and the virtual `${RUNTIME}-rX.Y.Z`
-   provided by the core package). Then it prepares `/var/lib/${RUNTIME}` +
-   `/docker-entrypoint.d`, symlinks `/var/log/${RUNTIME}.log` to stdout, **asserts
+   provided by the core package). Then it creates the image user `nonroot`
+   (`NONROOT_UID`/`NONROOT_GID`, 65532, home `/home/nonroot` 0755, empty), hands `/run`
+   to it, prepares `/docker-entrypoint.d`, symlinks `/var/log/${RUNTIME}.log` to
+   stdout, **asserts
    the installed `${RUNTIME}d`'s compiled paths (`--statedir`/`--control`/`--pid`/
    `--log`/`--user`/`--group` from its `--version` configure line) match
    `RUNTIME`/`RUNDIR`** — so a future upstream identity change fails the build
    instead of shipping an image whose entrypoint manages the wrong paths — then
-   `COPY rootfs/ /` and sets OCI `LABEL`s. There is **no `CMD`**: the default launch
+   `COPY rootfs/ /`, asserts the `nonroot` passwd entry equals the library
+   literals `UNIT_NONROOT_UID/GID/HOME`, sets OCI `LABEL`s, and ends with
+   `USER ${NONROOT_UID}:${NONROOT_GID}`. There is **no `CMD`**: the default launch
    (`${RUNTIME}d --no-daemon --control …`) lives in the entrypoint and the
    `HEALTHCHECK` is a script (`/docker-healthcheck.sh`), so the binary name and
    socket path stay single-sourced from `docker-entrypoint-common.sh` rather than
    duplicated in an exec-form instruction (which cannot expand a build ARG/ENV).
-   `tini` is the entrypoint wrapper.
+   `tini` is the entrypoint wrapper. The `php_image` stage writes
+   `90-nonroot-session.ini` for `cli` and `embed` (`session.save_path = /tmp`;
+   the default `/var/lib/php/sessions` is root-owned). All other PHP temp paths
+   stay at their `/tmp` defaults: `/tmp` is the writable temp dir at run time.
 
 `SUITE` and `IMAGE_SUFFIX` are declared **before the first `FROM`** so they reach
 the `FROM` line; they are re-declared inside stages that use them in `RUN`.
@@ -126,27 +137,39 @@ fetched file hashes to it. Bumping FreeUnit therefore means recomputing this
 digest too — which is exactly what `check-upstream.yml` automates.
 
 The core `freeunit` package's `postinst` creates the `freeunit:freeunit` system
-user/group, so the Dockerfile does not create it manually.
+user/group; it stays unused, as does the compiled statedir `/var/lib/freeunit`:
+the whole daemon runs as the image user.
 
 ## rootfs overlay
 
 `rootfs/` mirrors the container filesystem and is copied wholesale with
 `COPY rootfs/ /`. Anything baked into the image (entrypoint scripts, configs)
-lives there at its target path:
+lives there at its target path. Every script that runs in the image (the three
+below, `test/entrypoint-lib-cases.sh`, the example hooks) is portable POSIX sh
+(`#!/bin/sh`, dash in the image): no `local`, `[[ ]]`, arrays, `declare`,
+`pipefail`, `${var//}`, `$'..'`, `<<<`, `((..))`, `BASH_*`, no GNU-only options.
+Library functions name their variables `_ep_<function>_*` instead of `local`.
+`make lint` runs `shellcheck` (dialect from the shebang) and `dash -n` /
+`busybox sh -n` where installed; CI runs both.
 
 - `rootfs/docker-entrypoint.sh` — a thin dispatcher. It sources every `*.sh` in
   the **hook dir** (see below), then calls `dispatch_handler` (in the core
   library): if a sourced file defined a shell function `handle_<cmd>` matching
   `$1`, that handler owns the launch (it must `exec`, and a return or a non-zero
   exit is a fatal contract violation);
-  otherwise, for `freeunitd`/`freeunitd-debug` it runs the standard first-run
-  routine (`unit_initial_configuration`) and `exec`s the command. (When invoked
-  with no command at all, the dispatcher first supplies the default launch —
-  `${UNIT_BINARY} --no-daemon --control …` — from the `UNIT_*` constants, so the
-  image needs no `CMD`.) The first-run routine
-  only fires when `/var/lib/freeunit` is empty: it launches freeunitd against the
-  control socket and applies everything in `/docker-entrypoint.d/` (`*.sh` executed,
-  `*.pem` uploaded as certificate bundles, `*.json` PUT to `config`), then stops
+  otherwise, for `freeunitd`/`freeunitd-debug` it completes the command line
+  with the missing `--no-daemon --control --pid --statedir --tmpdir`
+  (`build_unit_launch_args`; a conflicting path dies), runs the standard
+  first-run routine (`unit_initial_configuration`) and `exec`s the command;
+  with `--version`/`--help`/`-h` it execs the command as given. (When invoked with no
+  command at all, the dispatcher first supplies the default launch -
+  `${UNIT_BINARY} --no-daemon` - so the image needs no `CMD`.) Before the hooks
+  are sourced it calls `drop_root_or_die "$0" "$@"` and `prepare_runtime_dirs`.
+  The first-run routine only fires when the state dir `/run/freeunit` is empty
+  (every start with a tmpfs at `/run`): it launches freeunitd against the control
+  socket, runs the `*.sh` of `/docker-entrypoint.d/`, uploads the `*.pem` and
+  PUTs the `*.json` of `/docker-entrypoint.d/` and then of the generated dir
+  `/run/docker-entrypoint.d` (certificates of both before any config), then stops
   freeunitd so the real start boots a populated state.
 - `rootfs/docker-entrypoint-common.sh` — the reusable **core library** sourced by
   the entrypoint (and available to child hooks). Every function takes its target
@@ -170,20 +193,31 @@ lives there at its target path:
   - command dispatch: `dispatch_handler <cmd> [args…]` runs a hook's
     `handle_<cmd>` (which must `exec`); it `die`s if the handler returns or exits
     non-zero without exec'ing, and is a no-op when no handler matches.
-  - privilege drop: `exec_as_user <user> <group> <cmd…>` via `setpriv`
-    (`--init-groups --no-new-privs`; gosu/su-exec are intentionally absent).
-  - user provisioning: `setup_user <user> <uid> <group> <gid> [dir] [chown]` —
-    idempotent; a child hook calls it to create a *different* app user.
+  - root guard: `drop_root_or_die <entrypoint> [args...]` - uid 0 hands stdio
+    to 65532 (`chown_stdio_to_nonroot`) and re-execs via `setpriv --reuid
+    --regid --clear-groups --no-new-privs` with `HOME=/home/nonroot`; without
+    CAP_SETUID/CAP_SETGID/CAP_CHOWN/CAP_KILL (`has_effective_cap`, CapEff) it
+    dies; group 0 at a non-zero uid dies. tini stays root in that mode and needs
+    CAP_KILL to forward `docker stop`; the healthcheck run as root probes via
+    `setpriv` as the owner of the socket (`stat -c %u:%g`; no CAP_DAC_OVERRIDE
+    needed). gosu/su-exec are
+    intentionally absent.
+  - `prepare_runtime_dirs` - creates the state and generated dirs and dies with
+    a mount hint unless `/var/run`, both dirs and `/tmp` are writable
+    (writability, not a uid: any non-root uid works). `HOME` is not checked: it
+    may be read-only.
+  - `build_unit_launch_args <binary> [args...]` - fills the global array
+    `UNIT_LAUNCH_ARGS`.
   - `unit_initial_configuration <binary>` is the full first-run routine composed
-    from the above, guarded by its `unit_config_failed` EXIT trap.
-  On source it provisions the default app user (default `freeunit`, which maps to
-  the package's system `freeunit:freeunit`) from `APPLICATION_USER/UID/GROUP/
-  GID/DIR/CHOWN` by calling `setup_user` — unless `UNIT_LIB_NO_PROVISION=1` is set,
-  which yields the constants/functions without the side effect (used by
-  `/docker-healthcheck.sh`, which sources the lib only to read `UNIT_CONTROL_SOCKET`).
-  The path constants derive from `UNIT_RUNTIME` (`freeunit`) and `UNIT_RUNDIR`
-  (`/var/run`), readonly literals — deliberately not env-derived — so the state-dir
-  wipe target and control paths cannot be redirected at runtime.
+    from the above, guarded by its `unit_config_failed` EXIT trap (wipes the
+    state and generated dirs).
+  Sourcing the library has no side effects (the healthcheck sources it for
+  `UNIT_CONTROL_SOCKET`). The path constants are readonly literals -
+  deliberately not env-derived - so the state-dir wipe target and control paths
+  cannot be redirected at runtime: `UNIT_STATE_DIR=/run/freeunit`,
+  `UNIT_TMP_DIR=/tmp`, `ENTRYPOINT_GENERATED_DIR=/run/docker-entrypoint.d`
+  (exported for the scripts), `UNIT_NONROOT_UID/GID/HOME`; socket and pid stay
+  under `UNIT_RUNDIR` (`/var/run`, a symlink to `/run`).
 
 `/docker-entrypoint.d` itself is created by the `RUN` (empty dirs are not tracked
 in git); users mount or add config snippets into it at runtime.
@@ -198,20 +232,35 @@ defines `handle_<cmd>` — e.g. a `handle_supercronic` that runs
 overwrite `/docker-entrypoint.sh`, so every robustness/security fix to the base
 entrypoint reaches them automatically.
 
-The entrypoint **sources** each hook into its own shell, so authors must respect
-the contract (the entrypoint enforces the first two):
+The entrypoint **sources** (`.`) each hook into its own POSIX sh, as the
+container user after the root guard, so authors must respect the contract (the
+entrypoint enforces the exec rule and the file ownership):
 
-- A hook file must **only define `handle_*` functions** — no top-level side
-  effects. Top-level code runs as root before dispatch; a non-zero last command
-  aborts startup (the loop reports which hook with `die`).
+- A hook file is **POSIX sh** (it is parsed by dash; bash syntax is a syntax
+  error at start) and must **only define `handle_<cmd>` functions**, `<cmd>`
+  made of `[A-Za-z0-9_]` - no top-level side effects. Top-level code runs before
+  dispatch; a non-zero last command aborts startup (the loop reports which hook
+  with `die`).
+- Handler lookup is `has_handler`: `command -v handle_<cmd>` must print exactly
+  `handle_<cmd>` (a function; an executable of that name in `PATH` prints a
+  path and does not count). A command word with other characters (`-`, `/`,
+  `.`) never selects a handler. The handler is called as `handle_<cmd> "$@"`
+  (command word first) on the left of `||`, so `set -e` is off inside it.
+- POSIX sh has no `local`: every variable a hook sets carries its own prefix
+  (`<cmd>_`, e.g. `supercronic_crontab`); `UNIT_*`, `ENTRYPOINT_*` and `_ep_*`
+  belong to the entrypoint. The positional parameters are the one per-call,
+  space-safe list (`set -- -flag "$@"` for default flags).
 - A `handle_<cmd>` **must `exec`** the final process. Returning (or exiting
   non-zero) is a fatal contract violation — `dispatch_handler` errors out rather
   than silently re-running the raw command.
 - Hooks share scope with the base: do **not** set a bare `trap` (it collides
-  with the first-run EXIT trap) and do **not** shadow the core library function
-  names (listed above) or the `UNIT_*` / `ENTRYPOINT_*` / `APPLICATION_*`
-  variables; prefix private helpers/vars. The hook dir path is a
-  build-time constant (not env-overridable), since the loop sources as root.
+  with the first-run EXIT trap) and do **not** redefine the core library
+  functions (listed above); prefix private helper functions too. The hook dir
+  path is a build-time constant (not env-overridable), and each hook file must
+  be root-owned and not
+  group/world-writable (`assert_safe_root_file`), so the unprivileged process
+  cannot rewrite it. The library has no `setup_user`/`exec_as_user`; a hook
+  calling them dies with "command not found".
 
 The two reusable routines above are the public surface handlers build on.
 
@@ -222,15 +271,35 @@ The two reusable routines above are the public surface handlers build on.
   proves the daemon and module load and the image's paths match the binary.
 - **Smoke test** — `test/smoke.sh <image-ref>` runs the image with the
   `test/fixtures/` PHP app mounted (config into `/docker-entrypoint.d`, code into
-  `/www`) and asserts a request is served by PHP — the entrypoint's happy path.
-- **Entrypoint-library unit checks** — `test/entrypoint-lib.sh <image-ref>` covers
-  the paths of `docker-entrypoint-common.sh` the smoke test cannot reach: a
+  `/www`) and asserts a request is served by PHP in each launch mode: hardened
+  (`--read-only --cap-drop=ALL`, tmpfs mounts; also a 1 MiB upload into `/tmp`,
+  every process uid 65532, no EROFS/EPERM/EACCES in the logs), plain,
+  `--user 0:0` (drop, also under `-t`; /dev/stderr reopenable from a shell and
+  from a `*.sh`; with exactly SETUID/SETGID/CHOWN/KILL a healthy probe as root
+  and a clean `docker stop`; refusal without CAP_CHOWN, without CAP_KILL, with
+  group 0 or `--group-add 0`), an arbitrary uid, and an explicit `freeunitd`
+  command (flags added; a conflicting `--statedir` dies).
+- **Entrypoint-library unit checks** - `test/entrypoint-lib.sh <image-ref>` (a
+  bash host driver) runs `test/entrypoint-lib-cases.sh` (POSIX sh) in the image
+  under `/bin/sh` (dash), as the image user. Tests that need another literal
+  (a short tick budget, a temp path) source a `sed`-patched copy of the
+  library: pre-binding a `readonly` variable aborts dash at the library's own
+  `readonly`. It covers the paths of `docker-entrypoint-common.sh` the smoke
+  test cannot reach: a
   non-executable `*.sh` dies actionably; `read_pid`/`stop_unit` handle empty,
   multi-line, newline-less and non-numeric pidfiles; `wait_for_control_socket`
   bounds its wait; `stop_unit` escalates to SIGKILL; `dispatch_handler` enforces
-  the hook exec-contract; `exec_as_user` drops privileges; `setup_user` validates
-  ids and is idempotent; `dir_has_content` gets the empty/non-empty boundary
-  right. It is a pytest-style shell suite (auto-discovered `test_*` functions,
+  the hook exec-contract; `prepare_runtime_dirs` dies with a hint on a
+  non-writable dir and accepts a read-only `HOME`; `build_unit_launch_args`
+  completes and refuses;
+  `unit_initial_configuration` applies the generated dir last and runs no
+  `*.sh` from it and a failure wipes state and generated dirs; the appliers keep
+  byte order, recursion, names with spaces and skip hidden entries;
+  `has_handler` finds only functions; the `nonroot` literals match passwd;
+  `/bin/sh` is dash; `session.save_path` is
+  `/tmp`; `assert_safe_root_file` accepts an image file and refuses a
+  process-owned one; `dir_has_content` gets the empty/non-empty boundary right.
+  The suite runs as the image user. It is a pytest-style shell suite (auto-discovered `test_*` functions,
   `assert_*` helpers, per-test process isolation) that re-execs itself inside the
   image so the real library is sourced as shipped. The host-side CLI parser and
   image build it shares with `test/smoke.sh` live in `test/lib.sh`. `make test`
@@ -242,10 +311,14 @@ The two reusable routines above are the public surface handlers build on.
   run on every PHP line) on Buildx with a per-PHP `type=gha` layer cache, and a
   report-only trivy scan on the 8.4 leg.
 - **Release** — `.github/workflows/release.yml` (on a `v*` tag) builds + tests
-  the matrix (`make test`, so both suites run), pushes the images to GHCR, and
-  records keyless (OIDC)
-  build-provenance + SPDX-SBOM attestations against each image digest (pushed to
-  GHCR as OCI referrers; verify with `gh attestation verify`).
+  the matrix (`make test`, so both suites run), refuses to run if any immutable
+  tag of the leg already exists, pushes the floating tags, records keyless (OIDC)
+  build-provenance + SPDX-SBOM attestations against that digest (pushed to GHCR
+  as OCI referrers; verify with `gh attestation verify`), and creates the
+  immutable tags last from the same digest (`imagetools create
+  --prefer-index=false`; without the flag buildx wraps the manifest in a new
+  index with another digest). A leg that failed after some immutable tags were
+  created is finished by hand (comment on that step).
 - `make lint` (hadolint, shellcheck, rumdl, typos) and `make scan` (trivy/grype,
   best-effort) are available locally — note actionlint/zizmor run in CI only.
 
@@ -278,6 +351,21 @@ The two reusable routines above are the public surface handlers build on.
 - The PHP extension list lives only in the `Dockerfile`'s `php_image` stage.
 - `.dockerignore` is an allowlist (`*` then `!rootfs/`) — only `rootfs/` enters
   the build context.
-- The entrypoint uses bash globs (`shopt -s nullglob globstar`) over
-  `/docker-entrypoint.d`, not `for f in $(find …)`; it passes `--pid` explicitly
-  and wipes `/var/lib/freeunit` if first-run config fails (retry on next start).
+- The appliers list `/docker-entrypoint.d` with `find` (recursive, hidden
+  entries pruned, `LC_ALL=C sort`) and read the list from fd 4 (a
+  here-document), so the loop runs in the current shell (a `die` ends the
+  entrypoint) and scripts keep the container's stdin; a newline in a file name
+  is not supported. Never redirect stdio around `chown_stdio_to_nonroot`: under
+  dash a `2>/dev/null` on its `chown` chowned /dev/null instead of stderr. The
+  entrypoint passes `--pid`,
+  `--statedir` and `--tmpdir` explicitly and wipes `/run/freeunit` (and the
+  generated dir) if first-run config fails (retry on next start).
+- `/var/lib/freeunit` is **not** the statedir: it is the compiled default, left
+  root-owned by the package; the build asserts `--statedir=/var/lib/freeunit` in
+  the configure line only to detect an upstream identity change.
+- The image starts as `65532:65532`. A derived image needs `USER 0:0` before
+  `RUN apt-get` and `USER 65532:65532` at the end; `COPY` files are root-owned
+  whatever the USER.
+- `test/examples.sh` retags `EXAMPLES_BASE_IMAGE` as
+  `ghcr.io/6run0/freeunit-php:trixie-php8.4` and rebuilds the `freeunit-ex-*` /
+  `freeunit-php-cron-example` images, overwriting local tags of those names.

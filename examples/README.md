@@ -13,7 +13,8 @@ on-ramp to the densest:
    hardening. The minimal self-contained deployment. Start here.
 2. [`dev/`](dev/) — **iterate without rebuilding.** Bind-mount the code so host
    edits are live, choose the PHP line with a build arg, and use the entrypoint
-   env knobs (`UNIT_ENTRYPOINT_QUIET_LOGS`, `APPLICATION_DIR`/`CHOWN`).
+   env knob `UNIT_ENTRYPOINT_QUIET_LOGS`, plus a writable named volume owned by
+   the image user.
 3. [`routing/`](routing/) — **multiple apps and routing.** One image serves two
    PHP apps behind URI routing with a static-file `share`/`fallback`, plus per-app
    PHP config (`options.admin`/`user`/`file`) and the `environment` block.
@@ -22,7 +23,7 @@ on-ramp to the densest:
    bundle, and declare a TLS listener — plus an HTTP→HTTPS redirect.
 5. [`cron-hook/`](cron-hook/) — **a second launch mode.** The entrypoint hook
    system runs one image in two roles (Unit web server and a `supercronic` cron
-   runner), and provisions a dedicated `worker` user for the cron role.
+   runner), both as the non-root image user.
 
 ## Capability → example matrix
 
@@ -30,11 +31,11 @@ on-ramp to the densest:
 | --- | --- |
 | Bake app + config onto the base image | `basic` |
 | Capability hardening (`cap_drop`/`no-new-privileges`) | all |
-| App worker privilege drop (`user`/`group` in config) | `basic`, all |
+| Non-root image user, no capabilities (`cap_drop: [ALL]`, no `cap_add`) | all |
 | Bind-mounted code (live edits) | `dev` |
 | PHP line selection via build arg | `dev` |
 | `UNIT_ENTRYPOINT_QUIET_LOGS` | `dev` |
-| `APPLICATION_DIR` + `APPLICATION_CHOWN` (writable volume) | `dev` |
+| Writable named volume owned by the image user | `dev` |
 | URI routing (`match` + `pass`) | `routing` |
 | Static `share` with `fallback` to a front controller | `routing` |
 | Multiple PHP applications in one image | `routing` |
@@ -45,12 +46,11 @@ on-ramp to the densest:
 | Applicator chain `*.sh` → `*.pem` → `*.json` | `web-app` |
 | First-run `*.sh` applicator | `web-app` |
 | `*.pem` applicator (`apply_certificates`) | `web-app` |
+| `ENTRYPOINT_GENERATED_DIR` (a rendered bundle) | `web-app` |
 | TLS listener | `web-app` |
 | `return` + `location` (HTTP→HTTPS redirect) | `web-app` |
 | Entrypoint hook (`handle_<cmd>`, second launch mode) | `cron-hook` |
 | Operator flag forwarding into a hook | `cron-hook` |
-| `setup_user` (provision a new user from a hook) | `cron-hook` |
-| `exec_as_user` (privilege drop in a hook) | `cron-hook` |
 
 ## Deliberately not covered
 

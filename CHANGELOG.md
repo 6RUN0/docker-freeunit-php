@@ -10,6 +10,96 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+The image runs without root. Migration for a derived image or a deployment is
+the numbered list below; the floating `trixie-php*` and `latest` tags point at
+the non-root image from this release on.
+
+### Removed
+
+- (2) The `APPLICATION_USER/UID/GROUP/GID/DIR/CHOWN` variables: they are
+  ignored, the entrypoint creates no user and changes no ownership at start.
+  Bake the ownership of writable paths into the image (named volumes copy the
+  mount point owner) or own the host dir by the process uid.
+- (3) The library functions `setup_user` and `exec_as_user`, and
+  `UNIT_LIB_NO_PROVISION`: a hook that calls them fails at start with "command
+  not found". A hook runs as the container user already; it just `exec`s.
+- The immutable tag without a version: `trixie-1.37.2-2-php*` stays the
+  root-based 0.3.0 image.
+- (12) bash in the entrypoint: `docker-entrypoint.sh`, the library and the
+  healthcheck are portable POSIX sh (`/bin/sh`, dash in the image). A hook in
+  `/docker-entrypoint-hook.d` is sourced by it, so a bash hook (`local`,
+  `[[ ]]`, arrays, `declare -F`) stops working: rewrite it in POSIX sh,
+  prefix its variables with `<cmd>_` (no `local`) and keep only `handle_<cmd>`
+  functions, `<cmd>` of `[A-Za-z0-9_]`. The handler is looked up with
+  `command -v`.
+
+### Changed
+
+- (1) The image starts as `nonroot` (uid:gid `65532:65532`, home
+  `/home/nonroot`): tini, the entrypoint, the Unit master and the PHP workers
+  run as that user and need no capability (`--cap-drop=ALL`, no `cap_add`). A
+  derived `Dockerfile` needs `USER 0:0` before `RUN apt-get` and
+  `USER 65532:65532` at the end. Any other non-root uid:gid works when its
+  mounts are writable for it.
+- (4) Do not set `applications.*.user` / `group` in the Unit config: an
+  unprivileged Unit runs its workers as its own user (it logs a warning that it
+  cannot use arbitrary user and group).
+- (5) The Unit state dir is `/run/freeunit` (was the compiled
+  `/var/lib/freeunit`); with a tmpfs at `/run` the configuration from
+  `/docker-entrypoint.d` is applied on every container start. An explicit
+  `freeunitd ...` / `freeunitd-debug ...` command gets the missing `--no-daemon`,
+  `--control`, `--pid`, `--statedir` and `--tmpdir` flags; one of the last four
+  with another value (e.g. `--statedir /var/lib/freeunit`) stops the start with
+  an error. `--version` / `--help` / `-h` run as given, without initial
+  configuration.
+- (6) Unit buffers request bodies in `/tmp` (`--tmpdir /tmp`), where PHP keeps
+  its uploads and temp files by default; `session.save_path` is `/tmp` for `cli`
+  and `embed` (was the root-owned `/var/lib/php/sessions`). `/tmp` must be
+  writable for the process uid; under `read_only` mount a host dir there
+  (recommended) or a tmpfs with a `size`.
+- (7) Every writable path is a mount the process uid can write: `/run` (tmpfs),
+  `/tmp`, and the application's own bind mounts. The entrypoint checks
+  `/var/run`, the state dir and `/tmp` before anything else and stops with a hint
+  naming the missing mount. `HOME` (`/home/nonroot`, empty, 0755) may stay
+  read-only; an application that writes there mounts it.
+- (8) A listener below port 1024 needs `net.ipv4.ip_unprivileged_port_start=0`
+  (the Docker default since Engine 20.10).
+- (9) Started as root (`--user 0:0`): the entrypoint hands stdio to 65532 and
+  re-execs itself as `65532:65532` with no supplementary groups and
+  `no_new_privs`, logging a warning; tini (PID 1) stays root in that mode.
+  It needs the default capabilities or at least
+  `CAP_SETUID`/`CAP_SETGID`/`CAP_CHOWN`/`CAP_KILL`; without them the start stops
+  with an error, as does a non-root uid with group 0. The healthcheck, run as
+  root then, probes as the owner of the control socket.
+- (10) The control socket, the state dir and the generated dir belong to the
+  same uid as the PHP workers: code execution in PHP can reconfigure Unit until
+  the container restarts. The unix socket rules out SSRF, not RCE.
+- (11) The immutable tags carry the image version:
+  `trixie-<freeunit-release>-v<version>-php<X.Y>` (e.g.
+  `trixie-1.37.2-2-v0.4.0-php8.4`), `<version>-php<X.Y>` and `<version>`. The
+  release workflow refuses to run when one of them exists and creates them
+  last, from the attested digest, after the floating tags.
+- The hook files in `/docker-entrypoint-hook.d` are sourced as the container
+  user; they must still be root-owned and not group/world-writable.
+- Examples: no `user`/`group` in the Unit configs, no `cap_add`; `dev` creates
+  `/data` owned by 65532 in its `Dockerfile` instead of `APPLICATION_CHOWN`;
+  `cron-hook` execs supercronic without a privilege drop; `web-app` renders its
+  TLS bundle into `$ENTRYPOINT_GENERATED_DIR`.
+
+### Added
+
+- `ENTRYPOINT_GENERATED_DIR` (`/run/docker-entrypoint.d`, exported to the
+  `/docker-entrypoint.d/*.sh` scripts): the `*.pem` and `*.json` a script renders
+  there are applied after those of `/docker-entrypoint.d` (certificates of both
+  dirs before any config, the generated config last); `*.sh` there are not
+  executed.
+- Library functions `drop_root_or_die`, `prepare_runtime_dirs`,
+  `build_unit_launch_args` and the literals `UNIT_TMP_DIR`,
+  `UNIT_NONROOT_UID/GID/HOME`.
+- `test/smoke.sh` runs every launch mode: hardened (`--read-only
+  --cap-drop=ALL`), plain, root drop (also under `-t`) and its refusals, an
+  arbitrary uid, an explicit `freeunitd` command.
+
 ## [0.3.0] - 2026-11-09
 
 ### Changed

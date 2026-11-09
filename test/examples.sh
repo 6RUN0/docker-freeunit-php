@@ -4,8 +4,9 @@
 # entrypoint contract. Two passes:
 #
 #   1. Static hardening lint (no Docker): every example's docker-compose.yml must
-#      carry the canonical capability-hardening block, so a copied example never
-#      silently drops cap_drop / no-new-privileges.
+#      carry the canonical capability-hardening block and grant no capability
+#      back, so a copied example never silently drops cap_drop /
+#      no-new-privileges or re-adds a capability the non-root image does not need.
 #   2. Live pass (Docker): build and run each example with `docker compose`, run
 #      its README "Verify" checks, then `down -v`.
 #
@@ -27,13 +28,16 @@ EXAMPLES_DIR="$REPO_ROOT/examples"
 # EXAMPLES_BASE_IMAGE when set (dev defaults to the same 8.4 line via .env).
 EXPECTED_BASE='ghcr.io/6run0/freeunit-php:trixie-php8.4'
 
-# The capability-hardening tokens every example compose must contain. This is the
-# anti-drift guard: a copied example that forgot a control fails here.
+# The capability-hardening tokens every example compose must contain, and the
+# ones it must not. This is the anti-drift guard: a copied example that forgot a
+# control, or grants a capability back, fails here.
 HARDENING_TOKENS=(
     'cap_drop'
+    '- ALL'
     'no-new-privileges'
-    'SETUID'
-    'SETGID'
+)
+FORBIDDEN_TOKENS=(
+    'cap_add'
 )
 
 log()  { echo "==> $*"; }
@@ -48,8 +52,12 @@ lint_hardening() {
         found=1
         local token
         for token in "${HARDENING_TOKENS[@]}"; do
-            grep -qF "$token" "$compose" \
+            grep -qF -- "$token" "$compose" \
                 || fail "$compose is missing hardening token '$token'"
+        done
+        for token in "${FORBIDDEN_TOKENS[@]}"; do
+            ! grep -qF -- "$token" "$compose" \
+                || fail "$compose carries '$token'; the image runs as its non-root user with no capabilities"
         done
         echo "    ok: ${compose#"$REPO_ROOT"/}"
     done < <(find "$EXAMPLES_DIR" -mindepth 2 -maxdepth 2 -name docker-compose.yml | sort)
@@ -102,9 +110,17 @@ run_example() {
 # --- Per-example checks -----------------------------------------------------
 
 check_basic() {
+    grep -qF 'read_only: true' "$EXAMPLES_DIR/basic/docker-compose.yml" \
+        || fail "basic: docker-compose.yml must run read_only"
     wait_http http://localhost:8080/ || fail "basic: app did not respond on :8080"
     local body; body="$(curl -fsS http://localhost:8080/)"
     assert_contains 'served by PHP' "$body" basic
+    # The root filesystem must refuse writes; /tmp (tmpfs) must accept them.
+    if compose basic exec -T app sh -c ': > /probe' 2>/dev/null; then
+        fail "basic: the root filesystem is writable"
+    fi
+    compose basic exec -T app sh -c ': > /tmp/probe' \
+        || fail "basic: /tmp is not writable"
 }
 
 check_dev() {
@@ -112,9 +128,9 @@ check_dev() {
     local body; body="$(curl -fsS http://localhost:8080/)"
     assert_contains 'served by PHP' "$body" dev
     assert_contains 'wrote a timestamp' "$body" dev
-    # The /data write must be owned by the unprivileged app user, not root.
+    # The /data write must be owned by the unprivileged image user, not root.
     local owner; owner="$(compose dev exec -T app stat -c '%U' /data/visits.log)"
-    [ "$owner" = freeunit ] || fail "dev: /data/visits.log owned by '$owner', expected 'freeunit'"
+    [ "$owner" = nonroot ] || fail "dev: /data/visits.log owned by '$owner', expected 'nonroot'"
 }
 
 check_routing() {
@@ -143,17 +159,17 @@ check_cron_hook() {
     assert_contains 'web role' "$web" cron-hook
     # The crontab uses supercronic's seven-field (per-second) syntax, so a tick
     # lands within a second; wait a few, then assert the cron job ran as the
-    # dedicated worker user (uid 1500), not as freeunit.
+    # non-root image user.
     log "cron-hook: waiting up to 15s for a cron tick"
     local _ logs
     for _ in $(seq 1 15); do
         logs="$(compose cron-hook logs cron 2>/dev/null || true)"
         case "$logs" in
-            *'uid=1500(worker)'*) echo "    cron ran as worker"; return 0 ;;
+            *'uid=65532(nonroot)'*) echo "    cron ran as nonroot"; return 0 ;;
         esac
         sleep 1
     done
-    fail "cron-hook: no 'uid=1500(worker)' cron line within 15s"
+    fail "cron-hook: no 'uid=65532(nonroot)' cron line within 15s"
 }
 
 # --- Main -------------------------------------------------------------------
