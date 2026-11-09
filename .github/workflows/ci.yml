@@ -80,7 +80,7 @@ jobs:
           "shellcheck-${SHELLCHECK_VERSION}/shellcheck" rootfs/*.sh test/*.sh
 
       - name: typos
-        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
+        uses: crate-ci/typos@4c8b7f51ca60df14e3c5ca82770dfbbe6c3dae85 # v1.52.0
 
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
@@ -93,7 +93,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pipx install zizmor==1.31.1
+          pipx install zizmor==1.32.0
           zizmor .github/workflows
 
       - name: rumdl (markdown)
@@ -151,7 +151,7 @@ jobs:
 
       - name: upload trivy SARIF
         if: matrix.php == '8.4'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
