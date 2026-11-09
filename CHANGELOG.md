@@ -10,6 +10,8 @@ release records the FreeUnit and PHP versions it ships.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-10
+
 The image runs without root. Migration for a derived image or a deployment is
 the numbered list below; the floating `trixie-php*` and `latest` tags point at
 the non-root image from this release on.
@@ -408,7 +410,8 @@ Initial public release. Bundles FreeUnit `1.35.5-build4` with PHP 8.3, 8.4, or
 - Documentation: `README.md` / `README.ru.md` (runtime API, security posture,
   upstream/fork split) and `CLAUDE.md` for repo guidance.
 
-[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
