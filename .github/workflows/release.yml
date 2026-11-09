@@ -68,7 +68,7 @@ jobs:
         run: echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 
       # The immutable tags carry the image version: the FreeUnit tag
-      # (<suite>-<freeunit-release>-v<version>-php<X.Y>), <version>-php<X.Y> and,
+      # (<suite>-<freeunit-release>-php<X.Y>-v<version>), <version>-php<X.Y> and,
       # on the default PHP line, the bare <version>. None may exist yet: a
       # rebuilt image never has the published digest, so overwriting one would
       # silently change what a pinned tag means. Checked before the build and
@@ -77,7 +77,7 @@ jobs:
       - name: refuse existing immutable tags
         run: |
           set -euo pipefail
-          tags="$IMAGE:${SUITE}-${FREEUNIT_RELEASE}-v${VERSION}-php${PHP} $IMAGE:${VERSION}-php${PHP}"
+          tags="$IMAGE:${SUITE}-${FREEUNIT_RELEASE}-php${PHP}-v${VERSION} $IMAGE:${VERSION}-php${PHP}"
           if [ "$PHP" = "$DEFAULT_PHP" ]; then
             tags="$tags $IMAGE:${VERSION}"
           fi

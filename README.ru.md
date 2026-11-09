@@ -34,7 +34,7 @@ Debian-пакетов.
 | `<версия>` | `:0.4.0` | этот выпуск репозитория, PHP по умолчанию |
 | `<suite>-php<X.Y>` | `:trixie-php8.3` | свежий выпуск на ветке PHP (двигается вперёд) |
 | `<версия>-php<X.Y>` | `:0.4.0-php8.3` | выпуск репозитория на ветке PHP |
-| `<suite>-<выпуск-freeunit>-v<версия>-php<X.Y>` | `:trixie-1.37.2-2-v0.4.0-php8.3` | сборка FreeUnit в выпуске репозитория на ветке PHP |
+| `<suite>-<выпуск-freeunit>-php<X.Y>-v<версия>` | `:trixie-1.37.2-2-php8.3-v0.4.0` | сборка FreeUnit в выпуске репозитория на ветке PHP |
 
 ```bash
 docker pull ghcr.io/6run0/freeunit-php:trixie-php8.4

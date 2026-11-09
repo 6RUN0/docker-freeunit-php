@@ -32,7 +32,7 @@ you need:
 | `<version>` | `:0.4.0` | that repo release, default PHP |
 | `<suite>-php<X.Y>` | `:trixie-php8.3` | newest release on a PHP line (moves forward) |
 | `<version>-php<X.Y>` | `:0.4.0-php8.3` | a repo release on a PHP line |
-| `<suite>-<freeunit-release>-v<version>-php<X.Y>` | `:trixie-1.37.2-2-v0.4.0-php8.3` | a FreeUnit build in a repo release on a PHP line |
+| `<suite>-<freeunit-release>-php<X.Y>-v<version>` | `:trixie-1.37.2-2-php8.3-v0.4.0` | a FreeUnit build in a repo release on a PHP line |
 
 ```bash
 docker pull ghcr.io/6run0/freeunit-php:trixie-php8.4

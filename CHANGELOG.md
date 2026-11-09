@@ -75,8 +75,8 @@ the non-root image from this release on.
   same uid as the PHP workers: code execution in PHP can reconfigure Unit until
   the container restarts. The unix socket rules out SSRF, not RCE.
 - (11) The immutable tags carry the image version:
-  `trixie-<freeunit-release>-v<version>-php<X.Y>` (e.g.
-  `trixie-1.37.2-2-v0.4.0-php8.4`), `<version>-php<X.Y>` and `<version>`. The
+  `trixie-<freeunit-release>-php<X.Y>-v<version>` (e.g.
+  `trixie-1.37.2-2-php8.4-v0.4.0`), `<version>-php<X.Y>` and `<version>`. The
   release workflow refuses to run when one of them exists and creates them
   last, from the attested digest, after the floating tags.
 - The hook files in `/docker-entrypoint-hook.d` are sourced as the container

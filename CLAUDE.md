@@ -69,7 +69,7 @@ the installed binary at build time (see below).
 The Makefile tags `$(SUITE)-$(FREEUNIT_RELEASE)-php$*` and the floating
 `$(SUITE)-php$*` locally; neither is immutable. The published immutable tags
 carry the image version and exist only in `release.yml`:
-`$(SUITE)-$(FREEUNIT_RELEASE)-v<version>-php<X.Y>`, `<version>-php<X.Y>` and the
+`$(SUITE)-$(FREEUNIT_RELEASE)-php<X.Y>-v<version>`, `<version>-php<X.Y>` and the
 bare `<version>` (see Verification - Release). Up to v0.3.0 the FreeUnit tag had
 no version (`trixie-1.37.2-2-php*` stays the root-based 0.3.0 image).
 
