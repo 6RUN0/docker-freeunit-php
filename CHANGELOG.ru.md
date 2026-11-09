@@ -10,6 +10,8 @@
 
 ## [Не выпущено]
 
+## [0.3.0] - 2026-11-09
+
 ### Изменено
 
 - Встроенный FreeUnit поднят до `1.37.2-2` (ранее `1.37.1-1`), пересчитан
@@ -326,7 +328,8 @@
 - Документация: `README.md` / `README.ru.md` (runtime-API, модель безопасности,
   разделение апстрим/форк) и `CLAUDE.md` с указаниями по репозиторию.
 
-[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.2.0...HEAD
+[Не выпущено]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/6RUN0/docker-freeunit-php/compare/v0.0.8...v0.0.9
